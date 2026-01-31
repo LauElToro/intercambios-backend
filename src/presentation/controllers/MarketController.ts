@@ -16,6 +16,7 @@ export class MarketController {
         tipo: req.query.tipo as 'productos' | 'servicios',
         precioMin: req.query.precioMin ? Number(req.query.precioMin) : undefined,
         precioMax: req.query.precioMax ? Number(req.query.precioMax) : undefined,
+        vendedorId: req.query.vendedorId ? Number(req.query.vendedorId) : undefined,
       };
 
       const items = await getMarketItemsUseCase.execute(filters);
