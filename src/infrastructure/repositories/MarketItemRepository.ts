@@ -110,8 +110,9 @@ export class MarketItemRepository implements IMarketItemRepository {
       where.vendedorId = filters.vendedorId;
     }
 
-    // Por defecto solo activos (listados y feeds)
-    where.status = filters?.status ?? 'active';
+    if (filters?.status) {
+      where.status = filters.status;
+    }
 
     const itemsData = await prisma.marketItem.findMany({
       where,
