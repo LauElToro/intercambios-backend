@@ -26,10 +26,10 @@ export class AuthController {
 
   static async register(req: Request, res: Response) {
     try {
-      const { nombre, email, password, contacto, ofrece, necesita, precioOferta, ubicacion } = req.body;
+      const { nombre, email, password, contacto, ubicacion } = req.body;
       
-      if (!nombre || !email || !password || !contacto || !ofrece || !necesita) {
-        return res.status(400).json({ error: 'Faltan campos requeridos' });
+      if (!nombre || !email || !password || !contacto) {
+        return res.status(400).json({ error: 'Faltan campos requeridos: nombre, email, password, contacto' });
       }
 
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -38,9 +38,6 @@ export class AuthController {
         email,
         password: hashedPassword,
         contacto,
-        ofrece,
-        necesita,
-        precioOferta,
         ubicacion,
       });
 

@@ -15,4 +15,5 @@ export interface IMarketItemRepository {
   update(item: MarketItem): Promise<MarketItem>;
   delete(id: number): Promise<void>;
   findByPrecioAproximado(precioReferencia: number, margenPorcentaje: number): Promise<MarketItem[]>;
+  findByVendedorId(vendedorId: number): Promise<MarketItem[]>;
 }

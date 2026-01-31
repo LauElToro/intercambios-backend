@@ -272,4 +272,42 @@ export class MarketItemRepository implements IMarketItemRepository {
       where: { id },
     });
   }
+
+  async findByVendedorId(vendedorId: number): Promise<MarketItem[]> {
+    const itemsData = await prisma.marketItem.findMany({
+      where: { vendedorId },
+      include: {
+        detalles: true,
+        caracteristicas: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return itemsData.map((itemData: any) => {
+      const detalles: Record<string, string> = {};
+      itemData.detalles.forEach((d: { clave: string; valor: string }) => {
+        detalles[d.clave] = d.valor;
+      });
+
+      const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
+
+      return MarketItem.create({
+        id: itemData.id,
+        titulo: itemData.titulo,
+        descripcion: itemData.descripcion,
+        precio: itemData.precio,
+        rubro: itemData.rubro as 'servicios' | 'productos' | 'alimentos' | 'experiencias',
+        vendedorId: itemData.vendedorId,
+        descripcionCompleta: itemData.descripcionCompleta || undefined,
+        ubicacion: itemData.ubicacion,
+        distancia: itemData.distancia || undefined,
+        imagen: itemData.imagen,
+        rating: itemData.rating,
+        detalles,
+        caracteristicas,
+        createdAt: itemData.createdAt,
+        updatedAt: itemData.updatedAt,
+      });
+    });
+  }
 }

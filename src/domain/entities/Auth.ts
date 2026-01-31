@@ -13,8 +13,5 @@ export interface RegisterData {
   email: string;
   password: string;
   contacto: string;
-  ofrece: string;
-  necesita: string;
-  precioOferta?: number;
   ubicacion?: string;
 }

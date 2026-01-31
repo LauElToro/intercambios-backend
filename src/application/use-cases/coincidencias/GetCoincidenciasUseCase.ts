@@ -22,13 +22,19 @@ export class GetCoincidenciasUseCase {
       throw new Error('Usuario no encontrado');
     }
 
-    if (!user.precioOferta) {
+    // Obtener el precio promedio de los productos/servicios del usuario
+    const userItems = await this.marketItemRepository.findByVendedorId(user.id);
+    const precioPromedio = userItems.length > 0
+      ? userItems.reduce((sum, item) => sum + item.precio, 0) / userItems.length
+      : 0;
+
+    if (!precioPromedio || precioPromedio === 0) {
       return [];
     }
 
     // Obtener items con precio aproximado
     const itemsAproximados = await this.marketItemRepository.findByPrecioAproximado(
-      user.precioOferta,
+      precioPromedio,
       margenPorcentaje
     );
 
@@ -48,8 +54,8 @@ export class GetCoincidenciasUseCase {
       })
       .map(item => ({
         item,
-        diferenciaPrecio: item.calcularDiferenciaPrecio(user.precioOferta),
-        porcentajeDiferencia: item.calcularPorcentajeDiferencia(user.precioOferta)
+        diferenciaPrecio: item.calcularDiferenciaPrecio(precioPromedio),
+        porcentajeDiferencia: item.calcularPorcentajeDiferencia(precioPromedio)
       }))
       .sort((a, b) => a.diferenciaPrecio - b.diferenciaPrecio);
 

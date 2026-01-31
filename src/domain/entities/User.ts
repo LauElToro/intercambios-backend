@@ -24,8 +24,8 @@ export class User {
     id?: number;
     nombre: string;
     contacto: string;
-    ofrece: string;
-    necesita: string;
+    ofrece?: string;
+    necesita?: string;
     precioOferta?: number;
     saldo?: number;
     limite?: number;
@@ -40,9 +40,9 @@ export class User {
       data.id || 0,
       data.nombre,
       data.contacto,
-      data.ofrece,
-      data.necesita,
-      data.precioOferta || 100,
+      data.ofrece || '',
+      data.necesita || '',
+      data.precioOferta || 0, // Ya no se usa en registro, se calcula de los productos
       data.saldo || 0,
       data.limite || 15000,
       data.email,

@@ -19,9 +19,9 @@ export class RegisterUseCase {
     const user = User.create({
       nombre: data.nombre,
       contacto: data.contacto,
-      ofrece: data.ofrece,
-      necesita: data.necesita,
-      precioOferta: data.precioOferta,
+      ofrece: '', // Se completará cuando cree productos/servicios
+      necesita: '', // Se completará cuando cree productos/servicios
+      precioOferta: 0, // Se calculará de los productos/servicios creados
       email: data.email,
       ubicacion: data.ubicacion,
     });
