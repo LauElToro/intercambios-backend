@@ -1,4 +1,4 @@
-// Script seguro para asegurar que las columnas necesarias existen
+// Script seguro para asegurar que todas las columnas necesarias existen
 // Este script es idempotente y seguro para producción
 // No elimina datos, solo agrega columnas si no existen
 
@@ -14,8 +14,20 @@ const prisma = new PrismaClient({
 async function ensureRequiredColumns() {
   try {
     const columnsToCheck = [
-      { name: 'nombre', defaultValue: 'Usuario', useEmail: true, required: true },
-      { name: 'contacto', defaultValue: 'Sin contacto', useEmail: false, required: true }
+      { name: 'nombre', defaultValue: 'Usuario', useEmail: true, required: true, type: 'TEXT' },
+      { name: 'contacto', defaultValue: 'Sin contacto', useEmail: false, required: true, type: 'TEXT' },
+      { name: 'oferce', defaultValue: null, useEmail: false, required: false, type: 'TEXT' },
+      { name: 'necesita', defaultValue: null, useEmail: false, required: false, type: 'TEXT' },
+      { name: 'precioOferta', defaultValue: 0, useEmail: false, required: false, type: 'INTEGER' },
+      { name: 'saldo', defaultValue: 0, useEmail: false, required: true, type: 'INTEGER' },
+      { name: 'limite', defaultValue: 15000, useEmail: false, required: true, type: 'INTEGER' },
+      { name: 'rating', defaultValue: null, useEmail: false, required: false, type: 'DOUBLE PRECISION' },
+      { name: 'totalResenas', defaultValue: 0, useEmail: false, required: true, type: 'INTEGER' },
+      { name: 'miembroDesde', defaultValue: null, useEmail: false, required: true, type: 'TIMESTAMP' },
+      { name: 'ubicacion', defaultValue: 'CABA', useEmail: false, required: true, type: 'TEXT' },
+      { name: 'verificado', defaultValue: false, useEmail: false, required: true, type: 'BOOLEAN' },
+      { name: 'createdAt', defaultValue: null, useEmail: false, required: true, type: 'TIMESTAMP' },
+      { name: 'updatedAt', defaultValue: null, useEmail: false, required: true, type: 'TIMESTAMP' }
     ];
 
     for (const column of columnsToCheck) {
@@ -31,62 +43,123 @@ async function ensureRequiredColumns() {
         LIMIT 1
       `);
       
-      if (Array.isArray(result) && result.length > 0) {
+      const columnExists = Array.isArray(result) && result.length > 0;
+      
+      if (!columnExists) {
+        console.log(`📝 Agregando columna ${column.name} de forma segura...`);
+        
+        // Construir el tipo SQL correcto
+        let typeSQL = column.type;
+        let defaultSQL = '';
+        
+        if (column.defaultValue !== null) {
+          if (column.type === 'INTEGER') {
+            defaultSQL = ` DEFAULT ${column.defaultValue}`;
+          } else if (column.type === 'DOUBLE PRECISION') {
+            defaultSQL = ''; // No tiene default
+          } else if (column.type === 'BOOLEAN') {
+            defaultSQL = ` DEFAULT ${column.defaultValue}`;
+          } else if (column.type === 'TIMESTAMP') {
+            defaultSQL = ` DEFAULT CURRENT_TIMESTAMP`;
+          } else {
+            defaultSQL = ` DEFAULT '${column.defaultValue}'`;
+          }
+        }
+        
+        // Agregar columna usando DO block para evitar errores si ya existe
+        await prisma.$executeRawUnsafe(`
+          DO $$ 
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns 
+              WHERE table_schema = 'public' 
+              AND table_name = 'User' 
+              AND column_name = '${column.name}'
+            ) THEN
+              ALTER TABLE "User" 
+              ADD COLUMN "${column.name}" ${typeSQL}${defaultSQL};
+            END IF;
+          END $$;
+        `);
+        
+        console.log(`✅ Columna ${column.name} agregada`);
+      } else {
         console.log(`✅ La columna ${column.name} ya existe`);
-        continue;
       }
       
-      console.log(`📝 Agregando columna ${column.name} de forma segura...`);
-      
-      // Paso 1: Agregar columna como nullable (seguro)
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE "User" 
-        ADD COLUMN IF NOT EXISTS "${column.name}" TEXT;
-      `);
-      
-      console.log(`📝 Actualizando valores NULL de ${column.name} con valores por defecto...`);
-      
-      // Paso 2: Actualizar solo los registros que tienen NULL (no afecta datos existentes)
-      if (column.useEmail) {
-        await prisma.$executeRawUnsafe(`
-          UPDATE "User" 
-          SET "${column.name}" = COALESCE(
-            (SELECT "email" FROM "User" u2 WHERE u2.id = "User".id LIMIT 1),
-            '${column.defaultValue}'
-          )
-          WHERE "${column.name}" IS NULL;
-        `);
-      } else {
-        await prisma.$executeRawUnsafe(`
-          UPDATE "User" 
-          SET "${column.name}" = '${column.defaultValue}'
-          WHERE "${column.name}" IS NULL;
-        `);
+      // Actualizar valores NULL solo para columnas requeridas que tienen default
+      // Hacerlo siempre, incluso si la columna ya existía (puede tener NULLs)
+      if (column.required && column.defaultValue !== null) {
+        console.log(`📝 Actualizando valores NULL de ${column.name} con valores por defecto...`);
+        
+        if (column.useEmail) {
+          await prisma.$executeRawUnsafe(`
+            UPDATE "User" 
+            SET "${column.name}" = COALESCE(
+              (SELECT "email" FROM "User" u2 WHERE u2.id = "User".id LIMIT 1),
+              '${column.defaultValue}'
+            )
+            WHERE "${column.name}" IS NULL;
+          `);
+        } else if (column.type === 'INTEGER') {
+          await prisma.$executeRawUnsafe(`
+            UPDATE "User" 
+            SET "${column.name}" = ${column.defaultValue}
+            WHERE "${column.name}" IS NULL;
+          `);
+        } else if (column.type === 'BOOLEAN') {
+          await prisma.$executeRawUnsafe(`
+            UPDATE "User" 
+            SET "${column.name}" = ${column.defaultValue}
+            WHERE "${column.name}" IS NULL;
+          `);
+        } else if (column.type === 'TIMESTAMP') {
+          await prisma.$executeRawUnsafe(`
+            UPDATE "User" 
+            SET "${column.name}" = CURRENT_TIMESTAMP
+            WHERE "${column.name}" IS NULL;
+          `);
+        } else {
+          await prisma.$executeRawUnsafe(`
+            UPDATE "User" 
+            SET "${column.name}" = '${column.defaultValue}'
+            WHERE "${column.name}" IS NULL;
+          `);
+        }
       }
       
-      // Paso 3: Intentar hacer NOT NULL solo si no hay NULLs
-      // Si hay NULLs, dejamos la columna nullable para no romper nada
-      const nullCount = await prisma.$queryRawUnsafe(`
-        SELECT COUNT(*) as count 
-        FROM "User" 
-        WHERE "${column.name}" IS NULL
-      `);
-      
-      if (Array.isArray(nullCount) && nullCount[0]?.count === 0) {
-        console.log(`📝 Haciendo la columna ${column.name} NOT NULL...`);
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "User" 
-          ALTER COLUMN "${column.name}" SET NOT NULL;
+      // Intentar hacer NOT NULL solo si es requerida y no hay NULLs
+      if (column.required) {
+        const nullCount = await prisma.$queryRawUnsafe(`
+          SELECT COUNT(*)::int as count 
+          FROM "User" 
+          WHERE "${column.name}" IS NULL
         `);
-      } else {
-        console.log(`⚠️  Hay valores NULL en ${column.name}, manteniendo la columna nullable por seguridad`);
+        
+        const count = Array.isArray(nullCount) && nullCount[0] ? Number(nullCount[0].count) : 0;
+        
+        if (count === 0) {
+          console.log(`📝 Haciendo la columna ${column.name} NOT NULL...`);
+          try {
+            await prisma.$executeRawUnsafe(`
+              ALTER TABLE "User" 
+              ALTER COLUMN "${column.name}" SET NOT NULL;
+            `);
+          } catch (error) {
+            console.log(`⚠️  No se pudo hacer NOT NULL ${column.name}, puede que ya lo sea`);
+          }
+        } else {
+          console.log(`⚠️  Hay ${count} valores NULL en ${column.name}, manteniendo la columna nullable por seguridad`);
+        }
       }
       
       console.log(`✅ Columna ${column.name} verificada/agregada exitosamente`);
     }
+    
+    console.log('✅ Todas las columnas verificadas/agregadas exitosamente');
   } catch (error) {
     // Si la columna ya existe o hay otro error, no fallar el build
-    if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+    if (error.message?.includes('already exists') || error.message?.includes('duplicate') || error.message?.includes('column') && error.message?.includes('exists')) {
       console.log('✅ Las columnas ya existen (error esperado)');
       return;
     }
