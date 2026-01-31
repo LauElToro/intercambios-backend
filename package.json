@@ -14,7 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
-    "vercel-build": "prisma generate"
+    "vercel-build": "prisma generate --schema=./prisma/schema.prisma"
   },
   "keywords": ["intercambius", "api", "backend", "ddd"],
   "author": "",
