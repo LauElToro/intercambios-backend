@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { LoginUseCase } from '../../application/use-cases/auth/LoginUseCase.js';
 import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCase.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
-import bcrypt from 'bcryptjs';
 
 const userRepository = new UserRepository();
 const loginUseCase = new LoginUseCase(userRepository);
@@ -32,11 +31,11 @@ export class AuthController {
         return res.status(400).json({ error: 'Faltan campos requeridos: nombre, email, password, contacto' });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      // El caso de uso hashea la contraseña una sola vez; no hashear aquí
       const user = await registerUseCase.execute({
         nombre,
         email,
-        password: hashedPassword,
+        password,
         contacto,
         ubicacion,
       });
