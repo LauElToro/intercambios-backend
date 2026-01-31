@@ -15,9 +15,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
-    "db:fix-nombre": "tsx scripts/fix-nombre-column.js",
-    "db:fix-all-columns": "tsx scripts/fix-all-columns.js",
-    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (prisma migrate deploy --schema=./prisma/schema.prisma || true) && (tsx scripts/fix-all-columns.js || true)"
+    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (npx prisma migrate resolve --rolled-back 20250131000000_add_nombre_column --schema=./prisma/schema.prisma || true) && (prisma migrate deploy --schema=./prisma/schema.prisma || true)"
   },
   "keywords": [
     "intercambius",

@@ -1,72 +1,23 @@
-# 🔧 Fix de Base de Datos - Columnas Faltantes
+# Base de datos en producción
 
-## ⚠️ Problema
-Si recibes el error: `Invalid prisma.user.findUnique() invocation: The column User.ofrece does not exist in the current database.`
+## Si falta la columna `User.ofrece` (u otras)
 
-## ✅ Solución Rápida
+La API **sincroniza el schema en runtime** en la primera petición (`ensureSchema`). No hace falta ejecutar scripts a mano: con un nuevo deploy o recargando la web, la primera petición añade columnas/tablas faltantes.
 
-### Opción 1: Ejecutar SQL directamente (MÁS RÁPIDO) ⚡
+## Si Prisma marca una migración como fallida (P3009)
 
-1. Abre tu cliente SQL (pgAdmin, DBeaver, psql, etc.)
-2. Conéctate a tu base de datos PostgreSQL
-3. Copia y pega el contenido completo de `backend/scripts/fix-db-direct.sql`
-4. Ejecuta el script
-
-Esto agregará todas las columnas faltantes inmediatamente.
-
-### Opción 2: Ejecutar script Node.js
+Ejecuta una vez (con `DATABASE_URL` configurado):
 
 ```bash
 cd backend
-npm run db:fix-all-columns
+npx prisma migrate resolve --rolled-back 20250131000000_add_nombre_column --schema=./prisma/schema.prisma
 ```
 
-Este script agregará todas las columnas faltantes de forma segura.
+Luego haz un nuevo deploy; en el build se volverá a ejecutar `migrate deploy`.
 
-### Opción 3: Usar Prisma DB Push (solo desarrollo)
+## SQL manual (opcional)
 
-```bash
-cd backend
-npm run db:push
-```
-
-## 📋 Columnas que se agregan
-
-El script agrega las siguientes columnas si no existen:
-
-- ✅ `nombre` (TEXT, NOT NULL)
-- ✅ `contacto` (TEXT, NOT NULL)
-- ✅ `oferce` (TEXT, nullable) ⚠️ **Esta es la que falta**
-- ✅ `necesita` (TEXT, nullable)
-- ✅ `precioOferta` (INTEGER, nullable)
-- ✅ `saldo` (INTEGER, DEFAULT 0)
-- ✅ `limite` (INTEGER, DEFAULT 15000)
-- ✅ `rating` (DOUBLE PRECISION, nullable)
-- ✅ `totalResenas` (INTEGER, DEFAULT 0)
-- ✅ `miembroDesde` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
-- ✅ `ubicacion` (TEXT, NOT NULL)
-- ✅ `verificado` (BOOLEAN, DEFAULT false)
-- ✅ `createdAt` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
-- ✅ `updatedAt` (TIMESTAMP, DEFAULT CURRENT_TIMESTAMP)
-
-## 🚀 En Producción (Vercel)
-
-El script se ejecuta automáticamente en cada deploy si `prisma migrate deploy` falla. No necesitas hacer nada manualmente.
-
-## 🔍 Verificación
-
-Para verificar que todas las columnas existen:
-
-```sql
-SELECT column_name, data_type, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'User'
-ORDER BY column_name;
-```
-
-## ⚡ Solución Inmediata
-
-Si necesitas solucionarlo AHORA, ejecuta este SQL directamente:
+Si tienes acceso directo a la base:
 
 ```sql
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "oferce" TEXT;
