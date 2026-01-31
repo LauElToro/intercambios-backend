@@ -7,4 +7,6 @@ export interface IUserRepository {
   save(user: User): Promise<User>;
   update(user: User): Promise<User>;
   delete(id: number): Promise<void>;
+  updatePassword(userId: number, hashedPassword: string): Promise<void>;
+  getUserWithPassword(email: string): Promise<{ user: User; password: string } | null>;
 }

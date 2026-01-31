@@ -35,7 +35,7 @@ export class IntercambioRepository implements IIntercambioRepository {
       orderBy: { fecha: 'desc' },
     });
 
-    return intercambiosData.map(data => Intercambio.create({
+    return intercambiosData.map((data: any) => Intercambio.create({
       id: data.id,
       usuarioId: data.usuarioId,
       otraPersonaId: data.otraPersonaId,

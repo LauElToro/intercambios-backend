@@ -1,7 +1,11 @@
 import prisma from './prisma.js';
+import bcrypt from 'bcryptjs';
 
 async function main() {
   console.log('🌱 Seeding database...');
+
+  // Hash de contraseña por defecto para usuarios de prueba
+  const defaultPassword = await bcrypt.hash('password123', 10);
 
   // Crear usuarios de ejemplo
   const user1 = await prisma.user.upsert({
@@ -10,6 +14,7 @@ async function main() {
     create: {
       nombre: 'María García',
       email: 'maria@example.com',
+      password: defaultPassword,
       contacto: '+54 11 1234-5678',
       ofrece: 'Diseño gráfico, logos, flyers',
       necesita: 'Clases de inglés, reparación de electrodomésticos',
@@ -29,6 +34,7 @@ async function main() {
     create: {
       nombre: 'Carlos Rodríguez',
       email: 'carlos@example.com',
+      password: defaultPassword,
       contacto: '+54 11 5555-1234',
       ofrece: 'Reparación de computadoras y celulares',
       necesita: 'Diseño gráfico, fotografía',

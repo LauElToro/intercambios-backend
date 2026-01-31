@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { put, PutBlobResult } from '@vercel/blob';
 
 const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
 const BLOB_BASE_URL = 'https://iuw1gnctn1hxzcnx.public.blob.vercel-storage.com';
@@ -8,13 +8,14 @@ export interface UploadResult {
   pathname: string;
 }
 
-export async function uploadImage(file: File | Buffer, filename: string): Promise<UploadResult> {
+export async function uploadImage(file: File | Buffer | Uint8Array | Blob, filename: string): Promise<UploadResult> {
   try {
     if (!BLOB_READ_WRITE_TOKEN) {
       throw new Error('BLOB_READ_WRITE_TOKEN no configurado');
     }
 
-    const blob = await put(filename, file, {
+    // @vercel/blob acepta Buffer directamente, pero TypeScript puede necesitar el cast
+    const blob: PutBlobResult = await put(filename, file as any, {
       access: 'public',
       token: BLOB_READ_WRITE_TOKEN,
       addRandomSuffix: true, // Evita colisiones de nombres

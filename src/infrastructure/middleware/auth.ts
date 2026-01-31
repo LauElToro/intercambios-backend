@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 export interface AuthRequest extends Request {
   userId?: number;
   userEmail?: string;
+  file?: Express.Multer.File;
 }
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {

@@ -15,11 +15,11 @@ export class MarketItemRepository implements IMarketItemRepository {
     if (!itemData) return null;
 
     const detalles: Record<string, string> = {};
-    itemData.detalles.forEach(d => {
+    itemData.detalles.forEach((d: { clave: string; valor: string }) => {
       detalles[d.clave] = d.valor;
     });
 
-    const caracteristicas = itemData.caracteristicas.map(c => c.texto);
+    const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
 
     return MarketItem.create({
       id: itemData.id,
@@ -75,13 +75,13 @@ export class MarketItemRepository implements IMarketItemRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return itemsData.map(itemData => {
+    return itemsData.map((itemData: any) => {
       const detalles: Record<string, string> = {};
-      itemData.detalles.forEach(d => {
+      itemData.detalles.forEach((d: { clave: string; valor: string }) => {
         detalles[d.clave] = d.valor;
       });
 
-      const caracteristicas = itemData.caracteristicas.map(c => c.texto);
+      const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
 
       return MarketItem.create({
         id: itemData.id,
@@ -121,13 +121,13 @@ export class MarketItemRepository implements IMarketItemRepository {
       },
     });
 
-    return itemsData.map(itemData => {
+    return itemsData.map((itemData: any) => {
       const detalles: Record<string, string> = {};
-      itemData.detalles.forEach(d => {
+      itemData.detalles.forEach((d: { clave: string; valor: string }) => {
         detalles[d.clave] = d.valor;
       });
 
-      const caracteristicas = itemData.caracteristicas.map(c => c.texto);
+      const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
 
       return MarketItem.create({
         id: itemData.id,
@@ -179,11 +179,11 @@ export class MarketItemRepository implements IMarketItemRepository {
     });
 
     const detalles: Record<string, string> = {};
-    itemData.detalles.forEach(d => {
+    itemData.detalles.forEach((d: { clave: string; valor: string }) => {
       detalles[d.clave] = d.valor;
     });
 
-    const caracteristicas = itemData.caracteristicas.map(c => c.texto);
+    const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
 
     return MarketItem.create({
       id: itemData.id,
@@ -242,11 +242,11 @@ export class MarketItemRepository implements IMarketItemRepository {
     });
 
     const detalles: Record<string, string> = {};
-    itemData.detalles.forEach(d => {
+    itemData.detalles.forEach((d: { clave: string; valor: string }) => {
       detalles[d.clave] = d.valor;
     });
 
-    const caracteristicas = itemData.caracteristicas.map(c => c.texto);
+    const caracteristicas = itemData.caracteristicas.map((c: { texto: string }) => c.texto);
 
     return MarketItem.create({
       id: itemData.id,
