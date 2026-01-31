@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { GetMarketItemsUseCase } from '../../application/use-cases/market/GetMarketItemsUseCase.js';
 import { MarketItemRepository } from '../../infrastructure/repositories/MarketItemRepository.js';
 import { MarketItem } from '../../domain/entities/MarketItem.js';
+import { AuthRequest } from '../../infrastructure/middleware/auth.js';
+import prisma from '../../infrastructure/database/prisma.js';
 
 const marketItemRepository = new MarketItemRepository();
 const getMarketItemsUseCase = new GetMarketItemsUseCase(marketItemRepository);
@@ -31,8 +33,25 @@ export class MarketController {
       if (!item) {
         return res.status(404).json({ error: 'Item no encontrado' });
       }
-      
-      res.json(item);
+
+      const user = await prisma.user.findUnique({
+        where: { id: item.vendedorId },
+        select: { id: true, nombre: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true },
+      });
+
+      res.json({
+        ...item,
+        vendedor: user ? {
+          id: user.id,
+          nombre: user.nombre,
+          ubicacion: user.ubicacion,
+          rating: user.rating ?? 0,
+          totalResenas: user.totalResenas ?? 0,
+          miembroDesde: user.miembroDesde,
+          verificado: user.verificado,
+          avatar: user.nombre.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
+        } : null,
+      });
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener item' });
     }
@@ -40,7 +59,12 @@ export class MarketController {
 
   static async createMarketItem(req: Request, res: Response) {
     try {
-      const item = await marketItemRepository.save(req.body as any);
+      const userId = (req as AuthRequest).userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'Debes iniciar sesión para crear un producto' });
+      }
+      const body = { ...req.body, vendedorId: userId };
+      const item = await marketItemRepository.save(body as any);
       res.status(201).json(item);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
