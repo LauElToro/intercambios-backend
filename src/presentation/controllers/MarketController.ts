@@ -37,7 +37,7 @@ export class MarketController {
 
       const user = await prisma.user.findUnique({
         where: { id: item.vendedorId },
-        select: { id: true, nombre: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true },
+        select: { id: true, nombre: true, contacto: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true },
       });
 
       res.json({
@@ -45,6 +45,7 @@ export class MarketController {
         vendedor: user ? {
           id: user.id,
           nombre: user.nombre,
+          contacto: user.contacto,
           ubicacion: user.ubicacion,
           rating: user.rating ?? 0,
           totalResenas: user.totalResenas ?? 0,
