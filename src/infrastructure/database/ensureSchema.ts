@@ -33,7 +33,7 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'nombre');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'contacto');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 0', tname, 'saldo');
-          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 15000', tname, 'limite');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 150000', tname, 'limite');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I DOUBLE PRECISION', tname, 'rating');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 0', tname, 'totalResenas');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'miembroDesde');
@@ -246,6 +246,41 @@ async function runSchemaSync(): Promise<void> {
       // ya existe
     }
 
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "ProductImage" ADD COLUMN IF NOT EXISTS "mediaType" TEXT DEFAULT 'image';`);
+    } catch {
+      // ignorar
+    }
+
+    // Favorito
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Favorito" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "marketItemId" INTEGER NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Favorito_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Favorito_userId_marketItemId_key" ON "Favorito"("userId", "marketItemId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Favorito_userId_idx" ON "Favorito"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Favorito_marketItemId_idx" ON "Favorito"("marketItemId");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Favorito_userId_fkey') THEN
+            ALTER TABLE "Favorito" ADD CONSTRAINT "Favorito_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Favorito_marketItemId_fkey') THEN
+            ALTER TABLE "Favorito" ADD CONSTRAINT "Favorito_marketItemId_fkey" FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
     // MarketItem: columnas nuevas para feeds/metadata (ADD COLUMN IF NOT EXISTS)
     const marketItemCols = [
       ['slug', 'TEXT'],
@@ -309,9 +344,10 @@ async function runSchemaSync(): Promise<void> {
       // ya existe
     }
 
-    // Intercambio: externalId
+    // Intercambio: externalId, marketItemId
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "externalId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "marketItemId" INTEGER;`);
     } catch {
       // ignorar
     }

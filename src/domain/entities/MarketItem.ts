@@ -1,9 +1,10 @@
-// Imagen adicional del producto (para feeds Meta/Google)
+// Medio del producto: imagen o video
 export interface ProductImageData {
   url: string;
   alt?: string;
   position?: number;
   isPrimary?: boolean;
+  mediaType?: 'image' | 'video';
 }
 
 export class MarketItem {

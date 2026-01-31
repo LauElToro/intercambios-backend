@@ -4,13 +4,13 @@ import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 
 export const usersRouter = express.Router();
 
-usersRouter.get('/me', (req, res, next) => {
+usersRouter.get('/me', (req, res) => {
   const userId = (req as AuthRequest).userId;
   if (!userId) {
     return res.status(401).json({ error: 'No autorizado' });
   }
-  req.params.id = String(userId);
-  UserController.getUserById(req as any, res);
+  (req.params as Record<string, string>).id = String(userId);
+  return UserController.getUserById(req as any, res);
 });
 
 usersRouter.get('/', UserController.getUsers);

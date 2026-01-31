@@ -1,7 +1,6 @@
 import { MarketItem } from '../../../domain/entities/MarketItem.js';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { IMarketItemRepository } from '../../../domain/repositories/IMarketItemRepository.js';
-import { Currency } from '../../../domain/value-objects/Currency.js';
 
 export interface Coincidencia {
   item: MarketItem;
@@ -38,19 +37,12 @@ export class GetCoincidenciasUseCase {
       margenPorcentaje
     );
 
-    // Filtrar por crédito disponible y excluir items propios
-    const limiteCreditoNegativo = Currency.getLimiteCreditoNegativo();
-    
+    const limite = user.limite ?? 150000;
+
     const coincidencias: Coincidencia[] = itemsAproximados
       .filter(item => {
-        // No mostrar items del mismo usuario
-        if (item.vendedorId === userId) {
-          return false;
-        }
-
-        // Verificar crédito disponible
-        const limiteEnIX = Currency.convertPesosToIX(limiteCreditoNegativo);
-        return user.puedeRealizarIntercambio(item.precio, limiteEnIX);
+        if (item.vendedorId === userId) return false;
+        return user.puedeRealizarIntercambio(item.precio, limite);
       })
       .map(item => ({
         item,

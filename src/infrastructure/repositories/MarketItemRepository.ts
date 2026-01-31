@@ -27,7 +27,7 @@ type PrismaItem = {
   metaDescription?: string | null;
   ogImage?: string | null;
   categoryId?: number | null;
-  images?: { url: string; alt: string | null; position: number; isPrimary: boolean }[];
+  images?: { url: string; alt: string | null; position: number; isPrimary: boolean; mediaType?: string }[];
 };
 
 function mapToEntity(itemData: PrismaItem): MarketItem {
@@ -39,6 +39,7 @@ function mapToEntity(itemData: PrismaItem): MarketItem {
     alt: img.alt ?? undefined,
     position: img.position,
     isPrimary: img.isPrimary,
+    mediaType: (img as any).mediaType ?? 'image',
   }));
   return MarketItem.create({
     id: itemData.id,
@@ -181,6 +182,7 @@ export class MarketItemRepository implements IMarketItemRepository {
           alt: img.alt,
           position: img.position ?? i,
           isPrimary: img.isPrimary ?? false,
+          mediaType: (img as any).mediaType ?? 'image',
         })),
       };
     }
@@ -235,6 +237,7 @@ export class MarketItemRepository implements IMarketItemRepository {
           alt: img.alt,
           position: img.position ?? i,
           isPrimary: img.isPrimary ?? false,
+          mediaType: (img as any).mediaType ?? 'image',
         })),
       };
     }

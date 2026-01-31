@@ -7,6 +7,8 @@ import { coincidenciasRouter } from '../src/presentation/routes/coincidencias.js
 import { intercambiosRouter } from '../src/presentation/routes/intercambios.js';
 import { authRouter } from '../src/presentation/routes/auth.js';
 import { uploadRouter } from '../src/presentation/routes/upload.js';
+import { favoritosRouter } from '../src/presentation/routes/favoritos.js';
+import { checkoutRouter } from '../src/presentation/routes/checkout.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
@@ -70,6 +72,8 @@ app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/users', authMiddleware, usersRouter);
 app.use('/api/intercambios', intercambiosRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/favoritos', favoritosRouter);
+app.use('/api/checkout', checkoutRouter);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

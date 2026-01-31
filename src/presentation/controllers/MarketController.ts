@@ -96,11 +96,12 @@ export class MarketController {
         rating: req.body.rating ?? existingItem.rating,
         detalles: req.body.detalles ?? existingItem.detalles,
         caracteristicas: req.body.caracteristicas ?? existingItem.caracteristicas,
+        images: req.body.images ?? existingItem.images,
         createdAt: existingItem.createdAt,
         updatedAt: existingItem.updatedAt,
       });
 
-      const savedItem = await marketItemRepository.update(updatedItem);
+      const savedItem = await marketItemRepository.update(updatedItem as any);
       res.json(savedItem);
     } catch (error: any) {
       res.status(400).json({ error: error.message });

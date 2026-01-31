@@ -22,8 +22,8 @@ model User {
   email         String    @unique
   password      String
   contacto      String
-  saldo         Int       @default(0)
-  limite        Int       @default(15000)
+  saldo         Int       @default(0)  // Positivo: infinito. Negativo: hasta -limite
+  limite        Int       @default(150000)  // Límite de saldo negativo (crédito en rojo)
   rating        Float?
   totalResenas  Int       @default(0)
   miembroDesde  DateTime  @default(now())
@@ -35,6 +35,7 @@ model User {
 
   perfilMercado UserPerfilMercado?
   marketItems   MarketItem[]
+  favoritos     Favorito[]
   intercambios  Intercambio[]           @relation("UsuarioIntercambios")
   intercambiosComoOtraPersona Intercambio[] @relation("OtraPersonaIntercambios")
 
@@ -130,6 +131,8 @@ model MarketItem {
   detalles          MarketItemDetalle[]
   caracteristicas   MarketItemCaracteristica[]
   images            ProductImage[]
+  favoritos         Favorito[]
+  intercambios      Intercambio[]
 
   @@index([vendedorId])
   @@index([rubro])
@@ -140,7 +143,7 @@ model MarketItem {
   @@index([slug])
 }
 
-// Imágenes adicionales del producto (para feeds: image_link múltiples)
+// Medios del producto: imágenes o video (máx 6 imágenes o 5 imágenes + 1 video)
 model ProductImage {
   id          Int       @id @default(autoincrement())
   marketItemId Int
@@ -148,10 +151,26 @@ model ProductImage {
   alt         String?
   position    Int       @default(0)
   isPrimary   Boolean   @default(false)
+  mediaType   String    @default("image") // 'image' | 'video'
   createdAt   DateTime  @default(now())
 
   marketItem  MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
 
+  @@index([marketItemId])
+}
+
+// Favoritos por usuario
+model Favorito {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  marketItemId Int
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketItem  MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketItemId])
+  @@index([userId])
   @@index([marketItemId])
 }
 
@@ -186,23 +205,26 @@ model MarketItemCaracteristica {
 
 model Intercambio {
   id              Int       @id @default(autoincrement())
-  externalId      String?   @unique // ID para feeds/ERP/ads
-  usuarioId       Int
-  otraPersonaId   Int
+  externalId      String?   @unique
+  usuarioId       Int       // Comprador/pagador
+  otraPersonaId   Int       // Vendedor/receptor
   otraPersonaNombre String
+  marketItemId    Int?      // Producto comprado (checkout automático)
   descripcion     String    @db.Text
-  creditos        Int
+  creditos        Int       // Negativo = usuarioId pagó, positivo = usuarioId recibió
   fecha           DateTime
-  estado          String    @default("pendiente") // pendiente | confirmado | cancelado
+  estado          String    @default("pendiente")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
   otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
+  marketItem      MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
 
   @@index([usuarioId])
   @@index([otraPersonaId])
   @@index([estado])
   @@index([fecha])
   @@index([externalId])
+  @@index([marketItemId])
 }

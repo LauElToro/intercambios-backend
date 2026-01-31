@@ -10,6 +10,7 @@ export class Intercambio {
     public readonly creditos: number,
     public readonly fecha: Date,
     private _estado: EstadoIntercambio,
+    public readonly marketItemId?: number,
     public readonly createdAt?: Date,
     public readonly updatedAt?: Date
   ) {}
@@ -23,6 +24,7 @@ export class Intercambio {
     creditos: number;
     fecha?: Date;
     estado?: EstadoIntercambio;
+    marketItemId?: number;
     createdAt?: Date;
     updatedAt?: Date;
   }): Intercambio {
@@ -35,6 +37,7 @@ export class Intercambio {
       data.creditos,
       data.fecha || new Date(),
       data.estado || 'pendiente',
+      data.marketItemId,
       data.createdAt,
       data.updatedAt
     );

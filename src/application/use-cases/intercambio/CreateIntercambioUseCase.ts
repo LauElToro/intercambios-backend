@@ -1,8 +1,6 @@
 import { Intercambio } from '../../../domain/entities/Intercambio.js';
 import { IIntercambioRepository } from '../../../domain/repositories/IIntercambioRepository.js';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
-import { Currency } from '../../../domain/value-objects/Currency.js';
-
 export class CreateIntercambioUseCase {
   constructor(
     private intercambioRepository: IIntercambioRepository,
@@ -23,8 +21,7 @@ export class CreateIntercambioUseCase {
       throw new Error('Usuario no encontrado');
     }
 
-    // Validar crédito disponible
-    const limiteCreditoNegativo = Currency.convertPesosToIX(Currency.getLimiteCreditoNegativo());
+    const limiteCreditoNegativo = usuario.limite ?? 150000;
     if (!usuario.puedeRealizarIntercambio(data.creditos, limiteCreditoNegativo)) {
       throw new Error('Límite de crédito negativo excedido');
     }

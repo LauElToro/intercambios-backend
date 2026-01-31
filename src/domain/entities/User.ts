@@ -41,7 +41,7 @@ export class User {
       data.nombre,
       data.contacto,
       data.saldo || 0,
-      data.limite || 15000,
+      data.limite ?? 150000,
       data.email,
       data.ofrece,
       data.necesita,
