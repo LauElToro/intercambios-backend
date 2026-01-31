@@ -205,14 +205,15 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Category_slug_key" ON "Category"("slug");`);
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Category_parentId_idx" ON "Category"("parentId");`);
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Category_rubro_idx" ON "Category"("rubro");`);
-      try {
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "Category" ADD CONSTRAINT "Category_parentId_fkey"
-          FOREIGN KEY ("parentId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-        `);
-      } catch (_e) {
-        // ya existe
-      }
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Category_parentId_fkey') THEN
+            ALTER TABLE "Category" ADD CONSTRAINT "Category_parentId_fkey"
+            FOREIGN KEY ("parentId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
     } catch {
       // ya existe
     }
@@ -232,14 +233,15 @@ async function runSchemaSync(): Promise<void> {
         );
       `);
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProductImage_marketItemId_idx" ON "ProductImage"("marketItemId");`);
-      try {
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "ProductImage" ADD CONSTRAINT "ProductImage_marketItemId_fkey"
-          FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-        `);
-      } catch (_e) {
-        // ya existe
-      }
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ProductImage_marketItemId_fkey') THEN
+            ALTER TABLE "ProductImage" ADD CONSTRAINT "ProductImage_marketItemId_fkey"
+            FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
     } catch {
       // ya existe
     }
@@ -294,14 +296,15 @@ async function runSchemaSync(): Promise<void> {
       `);
       await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "UserPerfilMercado_userId_key" ON "UserPerfilMercado"("userId");`);
       await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UserPerfilMercado_userId_idx" ON "UserPerfilMercado"("userId");`);
-      try {
-        await prisma.$executeRawUnsafe(`
-          ALTER TABLE "UserPerfilMercado" ADD CONSTRAINT "UserPerfilMercado_userId_fkey"
-          FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-        `);
-      } catch (_e) {
-        // ya existe
-      }
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'UserPerfilMercado_userId_fkey') THEN
+            ALTER TABLE "UserPerfilMercado" ADD CONSTRAINT "UserPerfilMercado_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
     } catch {
       // ya existe
     }
