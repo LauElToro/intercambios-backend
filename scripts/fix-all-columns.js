@@ -1,20 +1,95 @@
 // Script completo para agregar TODAS las columnas faltantes
 // Ejecutar manualmente: npm run db:fix-all-columns
 // O se ejecuta automáticamente en deploy si migrate deploy falla
+// Si la tabla User no existe, primero ejecuta la migración inicial.
 
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const prisma = new PrismaClient({
   log: ['error'],
 });
 
+/** Comprueba si la tabla User existe (pg_tables usa el nombre real, puede ser "User" o "user"). */
+async function userTableExists() {
+  try {
+    const r = await prisma.$queryRawUnsafe(`
+      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User' LIMIT 1
+    `);
+    if (Array.isArray(r) && r.length > 0) return true;
+    const r2 = await prisma.$queryRawUnsafe(`
+      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'user' LIMIT 1
+    `);
+    return Array.isArray(r2) && r2.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Ejecuta la migración inicial para crear todas las tablas si no existen. */
+async function ensureTablesExist() {
+  if (await userTableExists()) {
+    console.log('✅ Tabla User ya existe, continuando con columnas...');
+    return;
+  }
+  console.log('📦 Tabla User no existe. Ejecutando migración inicial...');
+  const migrationPath = path.join(__dirname, '..', 'prisma', 'migrations', '20250130000000_init', 'migration.sql');
+  const createUserTable = async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "User" (
+        "id" SERIAL NOT NULL,
+        "nombre" TEXT NOT NULL,
+        "email" TEXT NOT NULL,
+        "password" TEXT NOT NULL,
+        "contacto" TEXT NOT NULL,
+        "oferce" TEXT,
+        "necesita" TEXT,
+        "precioOferta" INTEGER DEFAULT 0,
+        "saldo" INTEGER NOT NULL DEFAULT 0,
+        "limite" INTEGER NOT NULL DEFAULT 15000,
+        "rating" DOUBLE PRECISION,
+        "totalResenas" INTEGER NOT NULL DEFAULT 0,
+        "miembroDesde" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "ubicacion" TEXT NOT NULL,
+        "verificado" BOOLEAN NOT NULL DEFAULT false,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_email_idx" ON "User"("email");`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_ubicacion_idx" ON "User"("ubicacion");`);
+    console.log('✅ Tabla User creada.');
+  };
+
+  try {
+    const sql = readFileSync(migrationPath, 'utf-8');
+    await prisma.$executeRawUnsafe(sql);
+    console.log('✅ Migración inicial aplicada.');
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.log('⚠️  Archivo de migración inicial no encontrado. Creando solo tabla User...');
+      await createUserTable();
+    } else {
+      console.log('⚠️  Migración inicial falló, creando solo tabla User:', err.message);
+      await createUserTable();
+    }
+  }
+}
+
 async function fixAllColumns() {
   try {
     console.log('🔧 Iniciando verificación y creación de columnas...');
-    
+    await ensureTablesExist();
+
     const columns = [
       { name: 'nombre', type: 'TEXT', required: true, defaultValue: 'Usuario', useEmail: true },
       { name: 'contacto', type: 'TEXT', required: true, defaultValue: 'Sin contacto', useEmail: false },
