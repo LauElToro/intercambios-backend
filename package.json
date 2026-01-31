@@ -16,7 +16,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
     "db:fix-nombre": "tsx scripts/fix-nombre-column.js",
-    "vercel-build": "prisma generate --schema=./prisma/schema.prisma"
+    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (prisma migrate deploy --schema=./prisma/schema.prisma 2>/dev/null || tsx scripts/ensure-nombre-column.js || true)"
   },
   "keywords": [
     "intercambius",

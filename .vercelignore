@@ -8,3 +8,5 @@ prisma/dev.db
 .vscode
 .idea
 src/infrastructure/server.ts
+# NO ignorar migraciones - necesarias para deploy
+# prisma/migrations
