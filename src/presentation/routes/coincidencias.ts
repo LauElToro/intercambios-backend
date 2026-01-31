@@ -3,4 +3,6 @@ import { CoincidenciasController } from '../controllers/CoincidenciasController.
 
 export const coincidenciasRouter = express.Router();
 
+// Ruta con query param para userId (más flexible)
+coincidenciasRouter.get('/', CoincidenciasController.getCoincidencias);
 coincidenciasRouter.get('/:userId', CoincidenciasController.getCoincidencias);
