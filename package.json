@@ -17,7 +17,7 @@
     "db:seed": "tsx src/infrastructure/database/seed.ts",
     "db:fix-nombre": "tsx scripts/fix-nombre-column.js",
     "db:fix-all-columns": "tsx scripts/fix-all-columns.js",
-    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (prisma migrate deploy --schema=./prisma/schema.prisma 2>/dev/null || tsx scripts/fix-all-columns.js || true)"
+    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (prisma migrate deploy --schema=./prisma/schema.prisma || true) && (tsx scripts/fix-all-columns.js || true)"
   },
   "keywords": [
     "intercambius",

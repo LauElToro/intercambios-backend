@@ -5,7 +5,6 @@
 
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
-import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -17,71 +16,187 @@ const prisma = new PrismaClient({
   log: ['error'],
 });
 
-/** Comprueba si la tabla User existe (pg_tables usa el nombre real, puede ser "User" o "user"). */
-async function userTableExists() {
+/** Comprueba si existe una tabla por nombre (pg_tables). */
+async function tableExists(tablename) {
   try {
     const r = await prisma.$queryRawUnsafe(`
-      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'User' LIMIT 1
-    `);
-    if (Array.isArray(r) && r.length > 0) return true;
-    const r2 = await prisma.$queryRawUnsafe(`
-      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'user' LIMIT 1
-    `);
-    return Array.isArray(r2) && r2.length > 0;
+      SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = $1 LIMIT 1
+    `, tablename);
+    return Array.isArray(r) && r.length > 0;
   } catch {
     return false;
   }
 }
 
-/** Ejecuta la migración inicial para crear todas las tablas si no existen. */
-async function ensureTablesExist() {
-  if (await userTableExists()) {
-    console.log('✅ Tabla User ya existe, continuando con columnas...');
-    return;
+/** Crea tabla User con todas las columnas si no existe. */
+async function createUserTableIfMissing() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "User" (
+      "id" SERIAL NOT NULL,
+      "nombre" TEXT NOT NULL,
+      "email" TEXT NOT NULL,
+      "password" TEXT NOT NULL,
+      "contacto" TEXT NOT NULL,
+      "oferce" TEXT,
+      "necesita" TEXT,
+      "precioOferta" INTEGER DEFAULT 0,
+      "saldo" INTEGER NOT NULL DEFAULT 0,
+      "limite" INTEGER NOT NULL DEFAULT 15000,
+      "rating" DOUBLE PRECISION,
+      "totalResenas" INTEGER NOT NULL DEFAULT 0,
+      "miembroDesde" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "ubicacion" TEXT NOT NULL,
+      "verificado" BOOLEAN NOT NULL DEFAULT false,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_email_idx" ON "User"("email");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_ubicacion_idx" ON "User"("ubicacion");`);
+}
+
+/** Añade columnas faltantes a User (idempotente). */
+async function ensureUserColumns() {
+  const cols = [
+    ['oferce', 'TEXT'],
+    ['necesita', 'TEXT'],
+    ['precioOferta', 'INTEGER DEFAULT 0'],
+    ['saldo', 'INTEGER DEFAULT 0'],
+    ['limite', 'INTEGER DEFAULT 15000'],
+    ['rating', 'DOUBLE PRECISION'],
+    ['totalResenas', 'INTEGER DEFAULT 0'],
+    ['miembroDesde', 'TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP'],
+    ['ubicacion', 'TEXT'],
+    ['verificado', 'BOOLEAN DEFAULT false'],
+    ['createdAt', 'TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP'],
+    ['updatedAt', 'TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP'],
+  ];
+  for (const [name, def] of cols) {
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "${name}" ${def};`);
+    } catch (e) {
+      if (!e.message?.includes('already exists')) console.error(`  ⚠️ ${name}:`, e.message);
+    }
   }
-  console.log('📦 Tabla User no existe. Ejecutando migración inicial...');
-  const migrationPath = path.join(__dirname, '..', 'prisma', 'migrations', '20250130000000_init', 'migration.sql');
-  const createUserTable = async () => {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "User" (
-        "id" SERIAL NOT NULL,
-        "nombre" TEXT NOT NULL,
-        "email" TEXT NOT NULL,
-        "password" TEXT NOT NULL,
-        "contacto" TEXT NOT NULL,
-        "oferce" TEXT,
-        "necesita" TEXT,
-        "precioOferta" INTEGER DEFAULT 0,
-        "saldo" INTEGER NOT NULL DEFAULT 0,
-        "limite" INTEGER NOT NULL DEFAULT 15000,
-        "rating" DOUBLE PRECISION,
-        "totalResenas" INTEGER NOT NULL DEFAULT 0,
-        "miembroDesde" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "ubicacion" TEXT NOT NULL,
-        "verificado" BOOLEAN NOT NULL DEFAULT false,
-        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "User_pkey" PRIMARY KEY ("id")
-      );
-    `);
-    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email");`);
-    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_email_idx" ON "User"("email");`);
-    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_ubicacion_idx" ON "User"("ubicacion");`);
-    console.log('✅ Tabla User creada.');
-  };
+}
+
+/** Crea MarketItem y tablas relacionadas si no existen. */
+async function createMarketTablesIfMissing() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "MarketItem" (
+      "id" SERIAL NOT NULL,
+      "titulo" TEXT NOT NULL,
+      "descripcion" TEXT NOT NULL,
+      "descripcionCompleta" TEXT,
+      "precio" INTEGER NOT NULL,
+      "rubro" TEXT NOT NULL,
+      "ubicacion" TEXT NOT NULL,
+      "distancia" DOUBLE PRECISION,
+      "imagen" TEXT NOT NULL,
+      "vendedorId" INTEGER NOT NULL,
+      "rating" DOUBLE PRECISION NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "MarketItem_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItem_vendedorId_idx" ON "MarketItem"("vendedorId");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItem_rubro_idx" ON "MarketItem"("rubro");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItem_precio_idx" ON "MarketItem"("precio");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItem_ubicacion_idx" ON "MarketItem"("ubicacion");`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "MarketItemDetalle" (
+      "id" SERIAL NOT NULL,
+      "marketItemId" INTEGER NOT NULL,
+      "clave" TEXT NOT NULL,
+      "valor" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "MarketItemDetalle_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "MarketItemDetalle_marketItemId_clave_key" ON "MarketItemDetalle"("marketItemId", "clave");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItemDetalle_marketItemId_idx" ON "MarketItemDetalle"("marketItemId");`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "MarketItemCaracteristica" (
+      "id" SERIAL NOT NULL,
+      "marketItemId" INTEGER NOT NULL,
+      "texto" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "MarketItemCaracteristica_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "MarketItemCaracteristica_marketItemId_idx" ON "MarketItemCaracteristica"("marketItemId");`);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "Intercambio" (
+      "id" SERIAL NOT NULL,
+      "usuarioId" INTEGER NOT NULL,
+      "otraPersonaId" INTEGER NOT NULL,
+      "otraPersonaNombre" TEXT NOT NULL,
+      "descripcion" TEXT NOT NULL,
+      "creditos" INTEGER NOT NULL,
+      "fecha" TIMESTAMP(3) NOT NULL,
+      "estado" TEXT NOT NULL DEFAULT 'pendiente',
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Intercambio_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Intercambio_usuarioId_idx" ON "Intercambio"("usuarioId");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Intercambio_otraPersonaId_idx" ON "Intercambio"("otraPersonaId");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Intercambio_estado_idx" ON "Intercambio"("estado");`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Intercambio_fecha_idx" ON "Intercambio"("fecha");`);
 
   try {
-    const sql = readFileSync(migrationPath, 'utf-8');
-    await prisma.$executeRawUnsafe(sql);
-    console.log('✅ Migración inicial aplicada.');
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      console.log('⚠️  Archivo de migración inicial no encontrado. Creando solo tabla User...');
-      await createUserTable();
-    } else {
-      console.log('⚠️  Migración inicial falló, creando solo tabla User:', err.message);
-      await createUserTable();
-    }
+    await prisma.$executeRawUnsafe(`ALTER TABLE "MarketItem" ADD CONSTRAINT "MarketItem_vendedorId_fkey" FOREIGN KEY ("vendedorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;`);
+  } catch (e) {
+    if (!e.message?.includes('already exists')) {}
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "MarketItemDetalle" ADD CONSTRAINT "MarketItemDetalle_marketItemId_fkey" FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;`);
+  } catch (e) {
+    if (!e.message?.includes('already exists')) {}
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "MarketItemCaracteristica" ADD CONSTRAINT "MarketItemCaracteristica_marketItemId_fkey" FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;`);
+  } catch (e) {
+    if (!e.message?.includes('already exists')) {}
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD CONSTRAINT "Intercambio_usuarioId_fkey" FOREIGN KEY ("usuarioId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;`);
+  } catch (e) {
+    if (!e.message?.includes('already exists')) {}
+  }
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD CONSTRAINT "Intercambio_otraPersonaId_fkey" FOREIGN KEY ("otraPersonaId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;`);
+  } catch (e) {
+    if (!e.message?.includes('already exists')) {}
+  }
+}
+
+/** Asegura que existan User (con columnas) y MarketItem, etc. */
+async function ensureTablesExist() {
+  const userExists = await tableExists('User') || await tableExists('user');
+  if (!userExists) {
+    console.log('📦 Tabla User no existe. Creando...');
+    await createUserTableIfMissing();
+    console.log('✅ Tabla User creada.');
+  } else {
+    console.log('✅ Tabla User existe. Sincronizando columnas...');
+    await ensureUserColumns();
+  }
+
+  const marketExists = await tableExists('MarketItem');
+  if (!marketExists) {
+    console.log('📦 Tabla MarketItem no existe. Creando tablas de mercado...');
+    await createMarketTablesIfMissing();
+    console.log('✅ Tablas MarketItem, etc. creadas.');
+  } else {
+    console.log('✅ Tabla MarketItem existe.');
   }
 }
 
