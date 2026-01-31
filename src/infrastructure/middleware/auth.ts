@@ -5,6 +5,9 @@ export interface AuthRequest extends Request {
   userId?: number;
   userEmail?: string;
   file?: Express.Multer.File;
+  params: Request['params'];
+  body: Request['body'];
+  headers: Request['headers'];
 }
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
