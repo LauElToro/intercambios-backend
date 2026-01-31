@@ -28,6 +28,7 @@ app.get('/', (req: Request, res: Response) => {
     name: 'Intercambius API',
     version: '1.0.0',
     status: 'running',
+    timestamp: new Date().toISOString(),
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
@@ -36,8 +37,7 @@ app.get('/', (req: Request, res: Response) => {
       users: '/api/users (protected)',
       intercambios: '/api/intercambios (protected)',
       upload: '/api/upload (protected)'
-    },
-    documentation: 'See API_ENDPOINTS.md for details'
+    }
   });
 });
 
