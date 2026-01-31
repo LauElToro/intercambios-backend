@@ -12,8 +12,10 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
+    "db:fix-nombre": "tsx scripts/fix-nombre-column.js",
     "vercel-build": "prisma generate --schema=./prisma/schema.prisma"
   },
   "keywords": [
