@@ -16,9 +16,9 @@ model User {
   email         String    @unique
   password      String    // Hash de contraseña
   contacto      String
-  ofrece        String
-  necesita      String
-  precioOferta  Int       @default(100) // Precio en IX
+  ofrece        String?   // Opcional - se completa cuando crea productos/servicios
+  necesita      String?   // Opcional - se completa cuando crea productos/servicios
+  precioOferta  Int?      @default(0) // Opcional - se calcula de los productos/servicios creados
   saldo         Int       @default(0) // Saldo en IX (puede ser negativo)
   limite        Int       @default(15000) // Límite de crédito en IX (equivalente a 15000 pesos)
   rating        Float?

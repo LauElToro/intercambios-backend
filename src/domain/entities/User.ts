@@ -5,12 +5,12 @@ export class User {
     public readonly id: number,
     public readonly nombre: string,
     public readonly contacto: string,
-    public readonly ofrece: string,
-    public readonly necesita: string,
-    public readonly precioOferta: number,
     saldo: number,
     public readonly limite: number,
     public readonly email?: string,
+    public readonly ofrece?: string,
+    public readonly necesita?: string,
+    public readonly precioOferta?: number,
     public readonly rating?: number,
     public readonly totalResenas?: number,
     public readonly miembroDesde?: Date,
@@ -24,12 +24,12 @@ export class User {
     id?: number;
     nombre: string;
     contacto: string;
-    ofrece?: string;
-    necesita?: string;
-    precioOferta?: number;
     saldo?: number;
     limite?: number;
     email?: string;
+    ofrece?: string;
+    necesita?: string;
+    precioOferta?: number;
     rating?: number;
     totalResenas?: number;
     miembroDesde?: Date;
@@ -40,12 +40,12 @@ export class User {
       data.id || 0,
       data.nombre,
       data.contacto,
-      data.ofrece || '',
-      data.necesita || '',
-      data.precioOferta || 0, // Ya no se usa en registro, se calcula de los productos
       data.saldo || 0,
       data.limite || 15000,
       data.email,
+      data.ofrece,
+      data.necesita,
+      data.precioOferta,
       data.rating,
       data.totalResenas,
       data.miembroDesde || new Date(),
@@ -71,10 +71,12 @@ export class User {
     this._saldo = nuevoSaldo;
   }
 
-  tieneCoincidencia(precio: number, margenPorcentaje: number = 0.2): boolean {
-    const margen = this.precioOferta * margenPorcentaje;
-    const precioMin = this.precioOferta - margen;
-    const precioMax = this.precioOferta + margen;
+  tieneCoincidencia(precio: number, precioReferencia: number, margenPorcentaje: number = 0.2): boolean {
+    // precioReferencia viene del promedio de los productos del usuario
+    // Ya no usamos this.precioOferta
+    const margen = precioReferencia * margenPorcentaje;
+    const precioMin = precioReferencia - margen;
+    const precioMax = precioReferencia + margen;
     return precio >= precioMin && precio <= precioMax;
   }
 }

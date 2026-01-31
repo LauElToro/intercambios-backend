@@ -52,16 +52,18 @@ export class UserController {
       }
 
       // Crear nueva instancia con los datos actualizados
+      // ofrece, necesita y precioOferta no se actualizan manualmente
+      // Se calculan automáticamente de los productos/servicios creados
       const updatedUser = User.create({
         id: existingUser.id,
         nombre: req.body.nombre ?? existingUser.nombre,
         contacto: req.body.contacto ?? existingUser.contacto,
-        ofrece: req.body.ofrece ?? existingUser.ofrece,
-        necesita: req.body.necesita ?? existingUser.necesita,
-        precioOferta: req.body.precioOferta ?? existingUser.precioOferta,
         saldo: existingUser.saldo,
         limite: existingUser.limite,
         email: req.body.email ?? existingUser.email,
+        ofrece: existingUser.ofrece, // No se actualiza manualmente
+        necesita: existingUser.necesita, // No se actualiza manualmente
+        precioOferta: existingUser.precioOferta, // No se actualiza manualmente
         rating: req.body.rating ?? existingUser.rating,
         totalResenas: req.body.totalResenas ?? existingUser.totalResenas,
         miembroDesde: existingUser.miembroDesde,
