@@ -1,3 +1,11 @@
+// Imagen adicional del producto (para feeds Meta/Google)
+export interface ProductImageData {
+  url: string;
+  alt?: string;
+  position?: number;
+  isPrimary?: boolean;
+}
+
 export class MarketItem {
   private constructor(
     public readonly id: number,
@@ -14,7 +22,18 @@ export class MarketItem {
     public readonly detalles?: Record<string, string>,
     public readonly caracteristicas?: string[],
     public readonly createdAt?: Date,
-    public readonly updatedAt?: Date
+    public readonly updatedAt?: Date,
+    // Marketplace / feeds
+    public readonly slug?: string,
+    public readonly status?: string,
+    public readonly condition?: string,
+    public readonly availability?: string,
+    public readonly brand?: string,
+    public readonly metaTitle?: string,
+    public readonly metaDescription?: string,
+    public readonly ogImage?: string,
+    public readonly categoryId?: number,
+    public readonly images?: ProductImageData[]
   ) {}
 
   static create(data: {
@@ -33,6 +52,16 @@ export class MarketItem {
     caracteristicas?: string[];
     createdAt?: Date;
     updatedAt?: Date;
+    slug?: string;
+    status?: string;
+    condition?: string;
+    availability?: string;
+    brand?: string;
+    metaTitle?: string;
+    metaDescription?: string;
+    ogImage?: string;
+    categoryId?: number;
+    images?: ProductImageData[];
   }): MarketItem {
     return new MarketItem(
       data.id || 0,
@@ -49,7 +78,17 @@ export class MarketItem {
       data.detalles,
       data.caracteristicas,
       data.createdAt,
-      data.updatedAt
+      data.updatedAt,
+      data.slug,
+      data.status,
+      data.condition,
+      data.availability,
+      data.brand,
+      data.metaTitle,
+      data.metaDescription,
+      data.ogImage,
+      data.categoryId,
+      data.images
     );
   }
 

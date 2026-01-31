@@ -4,17 +4,15 @@ import bcrypt from 'bcryptjs';
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Limpiar datos existentes
+  // Limpiar datos existentes (UserPerfilMercado se borra por cascade al borrar User)
   await prisma.marketItemCaracteristica.deleteMany();
   await prisma.marketItemDetalle.deleteMany();
   await prisma.marketItem.deleteMany();
   await prisma.intercambio.deleteMany();
   await prisma.user.deleteMany();
 
-  // Hash de contraseña por defecto para usuarios de prueba
   const defaultPassword = await bcrypt.hash('password123', 10);
 
-  // Crear usuarios de ejemplo
   const user1 = await prisma.user.upsert({
     where: { email: 'maria@example.com' },
     update: {},
@@ -23,9 +21,6 @@ async function main() {
       email: 'maria@example.com',
       password: defaultPassword,
       contacto: '+54 11 1234-5678',
-      ofrece: undefined,
-      necesita: undefined,
-      precioOferta: undefined,
       saldo: 150,
       limite: 15000,
       rating: 4.8,
@@ -43,9 +38,6 @@ async function main() {
       email: 'carlos@example.com',
       password: defaultPassword,
       contacto: '+54 11 5555-1234',
-      ofrece: '',
-      necesita: '',
-      precioOferta: 0,
       saldo: 200,
       limite: 15000,
       rating: 4.9,
@@ -61,9 +53,6 @@ async function main() {
       email: 'ana@example.com',
       password: defaultPassword,
       contacto: '+54 11 3333-9012',
-      ofrece: '',
-      necesita: '',
-      precioOferta: 0,
       saldo: 80,
       limite: 15000,
       rating: 4.7,
@@ -79,9 +68,6 @@ async function main() {
       email: 'pedro@example.com',
       password: defaultPassword,
       contacto: '+54 11 2222-3456',
-      ofrece: '',
-      necesita: '',
-      precioOferta: 0,
       saldo: 300,
       limite: 15000,
       rating: 4.6,
@@ -97,9 +83,6 @@ async function main() {
       email: 'sofia@example.com',
       password: defaultPassword,
       contacto: '+54 11 4444-7890',
-      ofrece: '',
-      necesita: '',
-      precioOferta: 0,
       saldo: 120,
       limite: 15000,
       rating: 4.9,
@@ -115,9 +98,6 @@ async function main() {
       email: 'donjose@example.com',
       password: defaultPassword,
       contacto: '+54 11 6666-1111',
-      ofrece: '',
-      necesita: '',
-      precioOferta: 0,
       saldo: 250,
       limite: 15000,
       rating: 5.0,
@@ -126,6 +106,25 @@ async function main() {
       verificado: true,
     },
   });
+
+  // Perfil de mercado por usuario (ofrece, necesita, precioOferta)
+  await prisma.userPerfilMercado.upsert({
+    where: { userId: user1.id },
+    create: { userId: user1.id, ofrece: 'Clases de idiomas', necesita: 'Diseño gráfico', precioOferta: 100 },
+    update: {},
+  });
+  await prisma.userPerfilMercado.upsert({
+    where: { userId: user2.id },
+    create: { userId: user2.id, ofrece: 'Reparación de PC y celulares', necesita: 'Clases de yoga', precioOferta: 150 },
+    update: {},
+  });
+  for (const u of [user3, user4, user5, user6]) {
+    await prisma.userPerfilMercado.upsert({
+      where: { userId: u.id },
+      create: { userId: u.id },
+      update: {},
+    });
+  }
 
   // Imágenes usando Unsplash (imágenes reales y visibles)
   const images = {

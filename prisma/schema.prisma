@@ -1,5 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// =============================================================================
+// INTERCAMBIUS - Schema de base de datos para marketplace
+// Diseñado para: catálogo, SEO, Meta/Google Ads y exportación de feeds
+// =============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -10,58 +12,147 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// -----------------------------------------------------------------------------
+// USUARIOS
+// -----------------------------------------------------------------------------
+
 model User {
   id            Int       @id @default(autoincrement())
   nombre        String
   email         String    @unique
-  password      String    // Hash de contraseña
+  password      String
   contacto      String
-  ofrece        String?   // Opcional - se completa cuando crea productos/servicios
-  necesita      String?   // Opcional - se completa cuando crea productos/servicios
-  precioOferta  Int?      @default(0) // Opcional - se calcula de los productos/servicios creados
-  saldo         Int       @default(0) // Saldo en IX (puede ser negativo)
-  limite        Int       @default(15000) // Límite de crédito en IX (equivalente a 15000 pesos)
+  saldo         Int       @default(0)
+  limite        Int       @default(15000)
   rating        Float?
   totalResenas  Int       @default(0)
   miembroDesde  DateTime  @default(now())
   ubicacion     String
   verificado    Boolean   @default(false)
+  bio           String?   @db.Text
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // Relaciones
+  perfilMercado UserPerfilMercado?
   marketItems   MarketItem[]
-  intercambios  Intercambio[] @relation("UsuarioIntercambios")
+  intercambios  Intercambio[]           @relation("UsuarioIntercambios")
   intercambiosComoOtraPersona Intercambio[] @relation("OtraPersonaIntercambios")
 
   @@index([email])
   @@index([ubicacion])
 }
 
+// Perfil de mercado por usuario: qué ofrece, qué necesita, crédito/precio oferta custom.
+// Se gestiona aparte (por productos o por configuración del usuario).
+model UserPerfilMercado {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  ofrece       String?  @db.Text // Lo que ofrece (resumen o custom)
+  necesita     String?  @db.Text // Lo que necesita (resumen o custom)
+  precioOferta Int?     // Crédito o precio oferta custom por usuario
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// CATEGORÍAS (jerárquicas, para feeds y navegación)
+// google_product_category: ID de categoría de Google Merchant Center
+// -----------------------------------------------------------------------------
+
+model Category {
+  id                    Int       @id @default(autoincrement())
+  parentId              Int?
+  name                  String
+  slug                  String    @unique
+  rubro                 String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
+  sortOrder             Int       @default(0)
+  metaTitle             String?
+  metaDescription       String?   @db.Text
+  googleProductCategoryId String? // Ej: "123" para Google Merchant
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  parent                Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children              Category[] @relation("CategoryHierarchy")
+  marketItems           MarketItem[]
+
+  @@index([parentId])
+  @@index([slug])
+  @@index([rubro])
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCTOS / LISTADOS (MarketItem)
+// Campos alineados con Meta Catalog y Google Merchant Center para feeds
+// -----------------------------------------------------------------------------
+
 model MarketItem {
   id                Int       @id @default(autoincrement())
+  slug              String?   @unique // URL amigable: /producto/mi-producto-123
   titulo            String
-  descripcion       String
+  descripcion       String    @db.Text
   descripcionCompleta String? @db.Text
-  precio            Int       // Precio en IX
+  precio            Int       // Precio en IX (moneda interna)
   rubro             String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
   ubicacion         String
   distancia         Float?
-  imagen            String
+  imagen            String    // Imagen principal (compatibilidad)
   vendedorId        Int
   rating            Float     @default(0)
+  // Estado y visibilidad
+  status            String    @default("active") // draft | active | paused | sold
+  condition         String?   // new | refurbished | used (requerido en feeds)
+  availability      String    @default("in_stock") // in_stock | out_of_stock
+  // Para feeds Meta / Google
+  brand             String?
+  gtin              String?   // Global Trade Item Number (Google)
+  mpn               String?   // Manufacturer Part Number (Google)
+  // Metadata SEO y redes
+  metaTitle         String?
+  metaDescription   String?   @db.Text
+  ogImage           String?   // URL imagen Open Graph
+  schemaOrg         Json?     // Schema.org Product (JSON-LD)
+  // Custom labels para segmentación en ads (0-4)
+  customLabel0      String?
+  customLabel1      String?
+  customLabel2      String?
+  customLabel3      String?
+  customLabel4      String?
+  categoryId        Int?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // Relaciones
   vendedor          User      @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   detalles          MarketItemDetalle[]
   caracteristicas   MarketItemCaracteristica[]
+  images            ProductImage[]
 
   @@index([vendedorId])
   @@index([rubro])
   @@index([precio])
   @@index([ubicacion])
+  @@index([status])
+  @@index([categoryId])
+  @@index([slug])
+}
+
+// Imágenes adicionales del producto (para feeds: image_link múltiples)
+model ProductImage {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  url         String
+  alt         String?
+  position    Int       @default(0)
+  isPrimary   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  marketItem  MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@index([marketItemId])
 }
 
 model MarketItemDetalle {
@@ -88,19 +179,24 @@ model MarketItemCaracteristica {
   @@index([marketItemId])
 }
 
+// -----------------------------------------------------------------------------
+// INTERCAMBIOS / TRANSACCIONES
+// externalId: para exportación a sistemas externos y reconciliación
+// -----------------------------------------------------------------------------
+
 model Intercambio {
   id              Int       @id @default(autoincrement())
+  externalId      String?   @unique // ID para feeds/ERP/ads
   usuarioId       Int
   otraPersonaId   Int
   otraPersonaNombre String
   descripcion     String    @db.Text
-  creditos        Int       // Positivo si recibió, negativo si dio
+  creditos        Int
   fecha           DateTime
-  estado          String    @default("pendiente") // 'pendiente' | 'confirmado' | 'cancelado'
+  estado          String    @default("pendiente") // pendiente | confirmado | cancelado
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Relaciones
   usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
   otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
 
@@ -108,4 +204,5 @@ model Intercambio {
   @@index([otraPersonaId])
   @@index([estado])
   @@index([fecha])
+  @@index([externalId])
 }
