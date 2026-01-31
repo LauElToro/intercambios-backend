@@ -22,6 +22,25 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Root endpoint - información de la API
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    name: 'Intercambius API',
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      market: '/api/market',
+      coincidencias: '/api/coincidencias',
+      users: '/api/users (protected)',
+      intercambios: '/api/intercambios (protected)',
+      upload: '/api/upload (protected)'
+    },
+    documentation: 'See API_ENDPOINTS.md for details'
+  });
+});
+
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ 
