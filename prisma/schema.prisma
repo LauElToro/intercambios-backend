@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  nombre        String
+  email         String    @unique
+  password      String    // Hash de contraseña
+  contacto      String
+  ofrece        String
+  necesita      String
+  precioOferta  Int       @default(100) // Precio en IX
+  saldo         Int       @default(0) // Saldo en IX (puede ser negativo)
+  limite        Int       @default(15000) // Límite de crédito en IX (equivalente a 15000 pesos)
+  rating        Float?
+  totalResenas  Int       @default(0)
+  miembroDesde  DateTime  @default(now())
+  ubicacion     String
+  verificado    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  marketItems   MarketItem[]
+  intercambios  Intercambio[] @relation("UsuarioIntercambios")
+  intercambiosComoOtraPersona Intercambio[] @relation("OtraPersonaIntercambios")
+
+  @@index([email])
+  @@index([ubicacion])
+}
+
+model MarketItem {
+  id                Int       @id @default(autoincrement())
+  titulo            String
+  descripcion       String
+  descripcionCompleta String? @db.Text
+  precio            Int       // Precio en IX
+  rubro             String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
+  ubicacion         String
+  distancia         Float?
+  imagen            String
+  vendedorId        Int
+  rating            Float     @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relaciones
+  vendedor          User      @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  detalles          MarketItemDetalle[]
+  caracteristicas   MarketItemCaracteristica[]
+
+  @@index([vendedorId])
+  @@index([rubro])
+  @@index([precio])
+  @@index([ubicacion])
+}
+
+model MarketItemDetalle {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  clave       String
+  valor       String
+  createdAt   DateTime  @default(now())
+
+  marketItem MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@unique([marketItemId, clave])
+  @@index([marketItemId])
+}
+
+model MarketItemCaracteristica {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  texto       String
+  createdAt   DateTime  @default(now())
+
+  marketItem MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@index([marketItemId])
+}
+
+model Intercambio {
+  id              Int       @id @default(autoincrement())
+  usuarioId       Int
+  otraPersonaId   Int
+  otraPersonaNombre String
+  descripcion     String    @db.Text
+  creditos        Int       // Positivo si recibió, negativo si dio
+  fecha           DateTime
+  estado          String    @default("pendiente") // 'pendiente' | 'confirmado' | 'cancelado'
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relaciones
+  usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
+  otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
+
+  @@index([usuarioId])
+  @@index([otraPersonaId])
+  @@index([estado])
+  @@index([fecha])
+}

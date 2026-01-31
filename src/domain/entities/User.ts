@@ -1,0 +1,80 @@
+export class User {
+  private _saldo: number;
+
+  private constructor(
+    public readonly id: number,
+    public readonly nombre: string,
+    public readonly contacto: string,
+    public readonly ofrece: string,
+    public readonly necesita: string,
+    public readonly precioOferta: number,
+    saldo: number,
+    public readonly limite: number,
+    public readonly email?: string,
+    public readonly rating?: number,
+    public readonly totalResenas?: number,
+    public readonly miembroDesde?: Date,
+    public readonly ubicacion?: string,
+    public readonly verificado?: boolean
+  ) {
+    this._saldo = saldo;
+  }
+
+  static create(data: {
+    id?: number;
+    nombre: string;
+    contacto: string;
+    ofrece: string;
+    necesita: string;
+    precioOferta?: number;
+    saldo?: number;
+    limite?: number;
+    email?: string;
+    rating?: number;
+    totalResenas?: number;
+    miembroDesde?: Date;
+    ubicacion?: string;
+    verificado?: boolean;
+  }): User {
+    return new User(
+      data.id || 0,
+      data.nombre,
+      data.contacto,
+      data.ofrece,
+      data.necesita,
+      data.precioOferta || 100,
+      data.saldo || 0,
+      data.limite || 15000,
+      data.email,
+      data.rating,
+      data.totalResenas,
+      data.miembroDesde || new Date(),
+      data.ubicacion || 'CABA',
+      data.verificado || false
+    );
+  }
+
+  get saldo(): number {
+    return this._saldo;
+  }
+
+  puedeRealizarIntercambio(precio: number, limiteCreditoNegativo: number): boolean {
+    const nuevoSaldo = this._saldo - precio;
+    return nuevoSaldo >= -limiteCreditoNegativo;
+  }
+
+  actualizarSaldo(creditos: number, limiteCreditoNegativo: number): void {
+    const nuevoSaldo = this._saldo + creditos;
+    if (nuevoSaldo < -limiteCreditoNegativo) {
+      throw new Error('Límite de crédito negativo excedido');
+    }
+    this._saldo = nuevoSaldo;
+  }
+
+  tieneCoincidencia(precio: number, margenPorcentaje: number = 0.2): boolean {
+    const margen = this.precioOferta * margenPorcentaje;
+    const precioMin = this.precioOferta - margen;
+    const precioMax = this.precioOferta + margen;
+    return precio >= precioMin && precio <= precioMax;
+  }
+}
