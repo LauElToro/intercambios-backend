@@ -8,11 +8,22 @@ import { intercambiosRouter } from '../src/presentation/routes/intercambios.js';
 import { authRouter } from '../src/presentation/routes/auth.js';
 import { uploadRouter } from '../src/presentation/routes/upload.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
+import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
 // Cargar variables de entorno
 dotenv.config();
 
 const app = express();
+
+// Sincronizar schema de la DB en cada cold start (añade columnas/tablas faltantes)
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  try {
+    await ensureSchema();
+  } catch {
+    // seguir aunque falle (ej. sin DATABASE_URL)
+  }
+  next();
+});
 
 // Middleware
 app.use(cors({
