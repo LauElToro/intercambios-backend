@@ -30,6 +30,9 @@ model User {
   ubicacion     String
   verificado    Boolean   @default(false)
   bio           String?   @db.Text
+  fotoPerfil    String?   // URL foto de perfil
+  banner        String?   // URL banner
+  redesSociales Json?     // { instagram, facebook, twitter, linkedin, web }
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import { CreateUserUseCase } from '../../application/use-cases/user/CreateUserUseCase.js';
 import { UpdateUserSaldoUseCase } from '../../application/use-cases/user/UpdateUserSaldoUseCase.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
@@ -45,15 +46,16 @@ export class UserController {
   static async updateUser(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
+      const authUserId = (req as AuthRequest).userId;
+      if (authUserId && authUserId !== id) {
+        return res.status(403).json({ error: 'Solo podés editar tu propio perfil' });
+      }
       const existingUser = await userRepository.findById(id);
       
       if (!existingUser) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
-      // Crear nueva instancia con los datos actualizados
-      // ofrece, necesita y precioOferta no se actualizan manualmente
-      // Se calculan automáticamente de los productos/servicios creados
       const updatedUser = User.create({
         id: existingUser.id,
         nombre: req.body.nombre ?? existingUser.nombre,
@@ -61,14 +63,18 @@ export class UserController {
         saldo: existingUser.saldo,
         limite: existingUser.limite,
         email: req.body.email ?? existingUser.email,
-        ofrece: existingUser.ofrece, // No se actualiza manualmente
-        necesita: existingUser.necesita, // No se actualiza manualmente
-        precioOferta: existingUser.precioOferta, // No se actualiza manualmente
+        ofrece: existingUser.ofrece,
+        necesita: existingUser.necesita,
+        precioOferta: existingUser.precioOferta,
         rating: req.body.rating ?? existingUser.rating,
         totalResenas: req.body.totalResenas ?? existingUser.totalResenas,
         miembroDesde: existingUser.miembroDesde,
         ubicacion: req.body.ubicacion ?? existingUser.ubicacion,
         verificado: req.body.verificado ?? existingUser.verificado,
+        bio: req.body.bio !== undefined ? req.body.bio : existingUser.bio,
+        fotoPerfil: req.body.fotoPerfil !== undefined ? req.body.fotoPerfil : existingUser.fotoPerfil,
+        banner: req.body.banner !== undefined ? req.body.banner : existingUser.banner,
+        redesSociales: req.body.redesSociales !== undefined ? req.body.redesSociales : existingUser.redesSociales,
       });
 
       const savedUser = await userRepository.update(updatedUser);

@@ -2,20 +2,7 @@ import { User } from '../../domain/entities/User.js';
 import { IUserRepository } from '../../domain/repositories/IUserRepository.js';
 import prisma from '../database/prisma.js';
 
-function mapToUser(userData: {
-  id: number;
-  nombre: string;
-  contacto: string;
-  saldo: number;
-  limite: number;
-  email: string;
-  rating: number | null;
-  totalResenas: number;
-  miembroDesde: Date;
-  ubicacion: string;
-  verificado: boolean;
-  perfilMercado?: { ofrece: string | null; necesita: string | null; precioOferta: number | null } | null;
-}): User {
+function mapToUser(userData: any): User {
   const p = userData.perfilMercado;
   return User.create({
     id: userData.id,
@@ -32,6 +19,10 @@ function mapToUser(userData: {
     miembroDesde: userData.miembroDesde,
     ubicacion: userData.ubicacion,
     verificado: userData.verificado,
+    bio: userData.bio ?? undefined,
+    fotoPerfil: userData.fotoPerfil ?? undefined,
+    banner: userData.banner ?? undefined,
+    redesSociales: userData.redesSociales ? (typeof userData.redesSociales === 'object' ? userData.redesSociales : undefined) : undefined,
   });
 }
 
@@ -112,6 +103,10 @@ export class UserRepository implements IUserRepository {
         totalResenas: user.totalResenas,
         ubicacion: user.ubicacion,
         verificado: user.verificado,
+        bio: user.bio ?? null,
+        fotoPerfil: user.fotoPerfil ?? null,
+        banner: user.banner ?? null,
+        redesSociales: user.redesSociales ? user.redesSociales : null,
       },
     });
 

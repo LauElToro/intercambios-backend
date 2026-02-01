@@ -309,9 +309,12 @@ async function runSchemaSync(): Promise<void> {
       }
     }
 
-    // User: bio
+    // User: bio, fotoPerfil, banner, redesSociales
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fotoPerfil" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "banner" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "redesSociales" JSONB;`);
     } catch {
       // ignorar
     }

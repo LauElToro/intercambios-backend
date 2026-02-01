@@ -15,7 +15,11 @@ export class User {
     public readonly totalResenas?: number,
     public readonly miembroDesde?: Date,
     public readonly ubicacion?: string,
-    public readonly verificado?: boolean
+    public readonly verificado?: boolean,
+    public readonly bio?: string,
+    public readonly fotoPerfil?: string,
+    public readonly banner?: string,
+    public readonly redesSociales?: Record<string, string>
   ) {
     this._saldo = saldo;
   }
@@ -35,6 +39,10 @@ export class User {
     miembroDesde?: Date;
     ubicacion?: string;
     verificado?: boolean;
+    bio?: string;
+    fotoPerfil?: string;
+    banner?: string;
+    redesSociales?: Record<string, string>;
   }): User {
     return new User(
       data.id || 0,
@@ -50,7 +58,11 @@ export class User {
       data.totalResenas,
       data.miembroDesde || new Date(),
       data.ubicacion || 'CABA',
-      data.verificado || false
+      data.verificado || false,
+      data.bio,
+      data.fotoPerfil,
+      data.banner,
+      data.redesSociales
     );
   }
 

@@ -31,10 +31,16 @@ export class UploadController {
         return res.status(401).json({ error: 'No autorizado' });
       }
 
+      const tipo = (req.body?.tipo || req.query?.tipo || 'market') as string;
       const timestamp = Date.now();
       const originalName = (req.file.originalname || 'file').replace(/[^a-zA-Z0-9.-]/g, '_');
       const ext = originalName.includes('.') ? '' : (req.file.mimetype.startsWith('video/') ? '.mp4' : '.jpg');
-      const filename = `market/${req.userId}/${timestamp}-${originalName}${ext}`;
+      const folder = tipo === 'fotoPerfil' || tipo === 'banner' ? 'profile' : 'market';
+      const filename = tipo === 'fotoPerfil' 
+        ? `${folder}/${req.userId}/foto-${timestamp}${ext || '.jpg'}`
+        : tipo === 'banner'
+        ? `${folder}/${req.userId}/banner-${timestamp}${ext || '.jpg'}`
+        : `market/${req.userId}/${timestamp}-${originalName}${ext}`;
 
       const result = await uploadImage(req.file.buffer, filename);
       
