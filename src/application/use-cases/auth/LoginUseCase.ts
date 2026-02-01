@@ -27,9 +27,10 @@ export class LoginUseCase {
       { expiresIn: '7d' }
     );
 
-    // No devolver password
-    const { password: _, ...userWithoutPassword } = user as any;
+    const userData = typeof (user as any).toJSON === 'function' 
+      ? (user as any).toJSON() 
+      : { ...user, saldo: user.saldo, limite: user.limite };
     
-    return { token, user: userWithoutPassword };
+    return { token, user: userData };
   }
 }

@@ -70,6 +70,29 @@ export class User {
     return this._saldo;
   }
 
+  toJSON(): Record<string, unknown> {
+    return {
+      id: this.id,
+      nombre: this.nombre,
+      contacto: this.contacto,
+      saldo: this._saldo,
+      limite: this.limite,
+      email: this.email,
+      ofrece: this.ofrece,
+      necesita: this.necesita,
+      precioOferta: this.precioOferta,
+      rating: this.rating,
+      totalResenas: this.totalResenas,
+      miembroDesde: this.miembroDesde,
+      ubicacion: this.ubicacion,
+      verificado: this.verificado,
+      bio: this.bio,
+      fotoPerfil: this.fotoPerfil,
+      banner: this.banner,
+      redesSociales: this.redesSociales,
+    };
+  }
+
   puedeRealizarIntercambio(precio: number, limiteCreditoNegativo: number): boolean {
     const nuevoSaldo = this._saldo - precio;
     return nuevoSaldo >= -limiteCreditoNegativo;

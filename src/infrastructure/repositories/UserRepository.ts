@@ -106,7 +106,7 @@ export class UserRepository implements IUserRepository {
         bio: user.bio ?? null,
         fotoPerfil: user.fotoPerfil ?? null,
         banner: user.banner ?? null,
-        redesSociales: user.redesSociales ? user.redesSociales : null,
+        redesSociales: user.redesSociales ?? undefined,
       },
     });
 
