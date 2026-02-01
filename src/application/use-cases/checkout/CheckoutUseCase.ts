@@ -4,6 +4,11 @@ import { IIntercambioRepository } from '../../../domain/repositories/IIntercambi
 import { Intercambio } from '../../../domain/entities/Intercambio.js';
 import prisma from '../../../infrastructure/database/prisma.js';
 
+export interface CheckoutResult {
+  intercambio: Intercambio;
+  conversacionId: number;
+}
+
 export class CheckoutUseCase {
   constructor(
     private userRepository: IUserRepository,
@@ -11,7 +16,7 @@ export class CheckoutUseCase {
     private intercambioRepository: IIntercambioRepository
   ) {}
 
-  async execute(data: { compradorId: number; marketItemId: number }): Promise<Intercambio> {
+  async execute(data: { compradorId: number; marketItemId: number }): Promise<CheckoutResult> {
     const item = await this.marketItemRepository.findById(data.marketItemId);
     if (!item) {
       throw new Error('Producto no encontrado');
@@ -71,19 +76,35 @@ export class CheckoutUseCase {
         },
       });
 
-      return Intercambio.create({
-        id: intercambio.id,
-        usuarioId: intercambio.usuarioId,
-        otraPersonaId: intercambio.otraPersonaId,
-        otraPersonaNombre: intercambio.otraPersonaNombre,
-        descripcion: intercambio.descripcion,
-        creditos: intercambio.creditos,
-        fecha: intercambio.fecha,
-        estado: 'confirmado',
-        marketItemId: intercambio.marketItemId ?? undefined,
-        createdAt: intercambio.createdAt,
-        updatedAt: intercambio.updatedAt,
+      const conversacion = await tx.conversacion.upsert({
+        where: {
+          compradorId_vendedorId: { compradorId: data.compradorId, vendedorId: item.vendedorId },
+        },
+        create: {
+          compradorId: data.compradorId,
+          vendedorId: item.vendedorId,
+          marketItemId: data.marketItemId,
+          intercambioId: intercambio.id,
+        },
+        update: { marketItemId: data.marketItemId, intercambioId: intercambio.id, updatedAt: new Date() },
       });
+
+      return {
+        intercambio: Intercambio.create({
+          id: intercambio.id,
+          usuarioId: intercambio.usuarioId,
+          otraPersonaId: intercambio.otraPersonaId,
+          otraPersonaNombre: intercambio.otraPersonaNombre,
+          descripcion: intercambio.descripcion,
+          creditos: intercambio.creditos,
+          fecha: intercambio.fecha,
+          estado: 'confirmado',
+          marketItemId: intercambio.marketItemId ?? undefined,
+          createdAt: intercambio.createdAt,
+          updatedAt: intercambio.updatedAt,
+        }),
+        conversacionId: conversacion.id,
+      };
     });
   }
 }

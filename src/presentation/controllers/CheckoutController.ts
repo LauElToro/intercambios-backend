@@ -24,8 +24,8 @@ export class CheckoutController {
         return res.status(400).json({ error: 'Falta el ID del producto' });
       }
 
-      const intercambio = await checkoutUseCase.execute({ compradorId, marketItemId });
-      res.status(201).json(intercambio);
+      const result = await checkoutUseCase.execute({ compradorId, marketItemId });
+      res.status(201).json(result);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

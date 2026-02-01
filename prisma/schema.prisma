@@ -38,6 +38,9 @@ model User {
   favoritos     Favorito[]
   intercambios  Intercambio[]           @relation("UsuarioIntercambios")
   intercambiosComoOtraPersona Intercambio[] @relation("OtraPersonaIntercambios")
+  conversacionesComprador   Conversacion[] @relation("ConversacionesComoComprador")
+  conversacionesVendedor    Conversacion[] @relation("ConversacionesComoVendedor")
+  mensajesEnviados          Mensaje[]      @relation("MensajesUsuario")
 
   @@index([email])
   @@index([ubicacion])
@@ -133,6 +136,7 @@ model MarketItem {
   images            ProductImage[]
   favoritos         Favorito[]
   intercambios      Intercambio[]
+  conversaciones    Conversacion[]
 
   @@index([vendedorId])
   @@index([rubro])
@@ -227,4 +231,42 @@ model Intercambio {
   @@index([fecha])
   @@index([externalId])
   @@index([marketItemId])
+}
+
+// -----------------------------------------------------------------------------
+// CHAT - Conversaciones entre comprador y vendedor (post-checkout)
+// -----------------------------------------------------------------------------
+
+model Conversacion {
+  id            Int       @id @default(autoincrement())
+  compradorId   Int
+  vendedorId    Int
+  marketItemId  Int?
+  intercambioId Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  comprador     User      @relation("ConversacionesComoComprador", fields: [compradorId], references: [id], onDelete: Cascade)
+  vendedor      User      @relation("ConversacionesComoVendedor", fields: [vendedorId], references: [id], onDelete: Cascade)
+  marketItem    MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
+  mensajes      Mensaje[]
+
+  @@unique([compradorId, vendedorId])
+  @@index([compradorId])
+  @@index([vendedorId])
+}
+
+model Mensaje {
+  id              Int       @id @default(autoincrement())
+  conversacionId  Int
+  senderId        Int
+  contenido       String    @db.Text
+  leido           Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  sender          User         @relation("MensajesUsuario", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId])
+  @@index([senderId])
 }
