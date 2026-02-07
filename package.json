@@ -16,7 +16,7 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx src/infrastructure/database/seed.ts",
     "db:check-coords": "tsx scripts/check-and-backfill-coords.ts",
-    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && (npx prisma migrate resolve --rolled-back 20250131000000_add_nombre_column --schema=./prisma/schema.prisma || true) && (prisma migrate deploy --schema=./prisma/schema.prisma || true)"
+    "vercel-build": "prisma generate --schema=./prisma/schema.prisma && prisma migrate deploy --schema=./prisma/schema.prisma"
   },
   "keywords": [
     "intercambius",
