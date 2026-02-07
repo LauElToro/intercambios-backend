@@ -36,6 +36,12 @@ export class CheckoutUseCase {
       throw new Error('No podés comprar tu propio producto');
     }
 
+    // Evitar doble compra: si ya compró este producto, no permitir otra vez
+    const compraExistente = await this.intercambioRepository.findByCompradorAndMarketItem(data.compradorId, data.marketItemId);
+    if (compraExistente) {
+      throw new Error('Ya compraste este producto. Podés coordinar la entrega por chat.');
+    }
+
     const limite = comprador.limite ?? 150000;
     if (!comprador.puedeRealizarIntercambio(item.precio, limite)) {
       throw new Error(`Saldo insuficiente. Podés gastar hasta ${Math.abs(comprador.saldo) + limite} IX (tu saldo + límite negativo)`);

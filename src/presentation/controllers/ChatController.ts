@@ -42,6 +42,54 @@ export class ChatController {
     }
   }
 
+  /** Iniciar o obtener conversación con un vendedor. Acepta marketItemId o vendedorId */
+  static async iniciarConversacion(req: AuthRequest, res: Response) {
+    try {
+      const compradorId = req.userId;
+      const marketItemId = req.body.marketItemId != null ? parseInt(req.body.marketItemId) : null;
+      const vendedorIdParam = req.body.vendedorId != null ? parseInt(req.body.vendedorId) : null;
+      if (!compradorId) return res.status(401).json({ error: 'No autorizado' });
+
+      let vendedorId: number;
+      let marketItemIdFinal: number | null = null;
+
+      if (marketItemId && !isNaN(marketItemId)) {
+        const item = await prisma.marketItem.findUnique({
+          where: { id: marketItemId },
+          select: { vendedorId: true },
+        });
+        if (!item) return res.status(404).json({ error: 'Producto no encontrado' });
+        vendedorId = item.vendedorId;
+        marketItemIdFinal = marketItemId;
+      } else if (vendedorIdParam && !isNaN(vendedorIdParam)) {
+        vendedorId = vendedorIdParam;
+      } else {
+        return res.status(400).json({ error: 'Falta marketItemId o vendedorId' });
+      }
+
+      if (vendedorId === compradorId) return res.status(400).json({ error: 'No podés contactarte a vos mismo' });
+
+      const conversacion = await prisma.conversacion.upsert({
+        where: {
+          compradorId_vendedorId: { compradorId, vendedorId },
+        },
+        create: {
+          compradorId,
+          vendedorId,
+          marketItemId: marketItemIdFinal,
+        },
+        update: {
+          ...(marketItemIdFinal && { marketItemId: marketItemIdFinal }),
+          updatedAt: new Date(),
+        },
+      });
+
+      res.status(200).json({ conversacionId: conversacion.id });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   static async getMensajes(req: AuthRequest, res: Response) {
     try {
       const userId = req.userId;

@@ -7,6 +7,9 @@ export interface MarketItemFilters {
   precioMax?: number;
   vendedorId?: number;
   status?: string; // default 'active' para listados y feeds
+  userLat?: number;
+  userLng?: number;
+  distanciaMax?: number;
 }
 
 export interface IMarketItemRepository {

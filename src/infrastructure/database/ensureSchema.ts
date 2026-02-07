@@ -283,6 +283,7 @@ async function runSchemaSync(): Promise<void> {
 
     // MarketItem: columnas nuevas para feeds/metadata (ADD COLUMN IF NOT EXISTS)
     const marketItemCols = [
+      ['tipoPago', 'TEXT DEFAULT \'ix\''],
       ['slug', 'TEXT'],
       ['status', 'TEXT DEFAULT \'active\''],
       ['condition', 'TEXT'],

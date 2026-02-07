@@ -5,5 +5,6 @@ import { authMiddleware } from '../../infrastructure/middleware/auth.js';
 export const chatRouter = express.Router();
 
 chatRouter.get('/', authMiddleware, ChatController.getConversaciones);
+chatRouter.post('/iniciar', authMiddleware, ChatController.iniciarConversacion);
 chatRouter.get('/:conversacionId', authMiddleware, ChatController.getMensajes);
 chatRouter.post('/:conversacionId', authMiddleware, ChatController.enviarMensaje);

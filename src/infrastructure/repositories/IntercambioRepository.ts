@@ -25,6 +25,26 @@ export class IntercambioRepository implements IIntercambioRepository {
     });
   }
 
+  async findByCompradorAndMarketItem(compradorId: number, marketItemId: number): Promise<Intercambio | null> {
+    const intercambioData = await prisma.intercambio.findFirst({
+      where: { usuarioId: compradorId, marketItemId },
+    });
+    if (!intercambioData) return null;
+    return Intercambio.create({
+      id: intercambioData.id,
+      usuarioId: intercambioData.usuarioId,
+      otraPersonaId: intercambioData.otraPersonaId,
+      otraPersonaNombre: intercambioData.otraPersonaNombre,
+      descripcion: intercambioData.descripcion,
+      creditos: intercambioData.creditos,
+      fecha: intercambioData.fecha,
+      estado: intercambioData.estado as 'pendiente' | 'confirmado' | 'cancelado',
+      marketItemId: (intercambioData as any).marketItemId ?? undefined,
+      createdAt: intercambioData.createdAt,
+      updatedAt: intercambioData.updatedAt,
+    });
+  }
+
   async findByUserId(userId: number): Promise<Intercambio[]> {
     const intercambiosData = await prisma.intercambio.findMany({
       where: {

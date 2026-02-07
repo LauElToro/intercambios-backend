@@ -103,8 +103,11 @@ model MarketItem {
   descripcion       String    @db.Text
   descripcionCompleta String? @db.Text
   precio            Int       // Precio en IX (moneda interna)
+  tipoPago          String?   @default("ix") // ix | convenir | pesos | ix_pesos
   rubro             String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
   ubicacion         String
+  lat               Float?
+  lng               Float?
   distancia         Float?
   imagen            String    // Imagen principal (compatibilidad)
   vendedorId        Int

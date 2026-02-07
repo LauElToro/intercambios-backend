@@ -2,15 +2,34 @@ import { MarketItem } from '../../domain/entities/MarketItem.js';
 import { IMarketItemRepository, MarketItemFilters } from '../../domain/repositories/IMarketItemRepository.js';
 import prisma from '../database/prisma.js';
 
+/** Distancia en km entre dos puntos (fórmula de Haversine) */
+function haversineDistanceKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 type PrismaItem = {
   id: number;
   titulo: string;
   descripcion: string;
   precio: number;
+  tipoPago?: string | null;
   rubro: string;
   vendedorId: number;
   descripcionCompleta: string | null;
   ubicacion: string;
+  lat: number | null;
+  lng: number | null;
   distancia: number | null;
   imagen: string;
   rating: number;
@@ -46,10 +65,13 @@ function mapToEntity(itemData: PrismaItem): MarketItem {
     titulo: itemData.titulo,
     descripcion: itemData.descripcion,
     precio: itemData.precio,
+    tipoPago: itemData.tipoPago ?? undefined,
     rubro: itemData.rubro as 'servicios' | 'productos' | 'alimentos' | 'experiencias',
     vendedorId: itemData.vendedorId,
     descripcionCompleta: itemData.descripcionCompleta ?? undefined,
     ubicacion: itemData.ubicacion,
+    lat: itemData.lat ?? undefined,
+    lng: itemData.lng ?? undefined,
     distancia: itemData.distancia ?? undefined,
     imagen: itemData.imagen,
     rating: itemData.rating,
@@ -125,7 +147,33 @@ export class MarketItemRepository implements IMarketItemRepository {
       orderBy: { createdAt: 'desc' },
     });
 
-    return itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
+    let items = itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
+
+    // Filtrar por distancia si se proporciona ubicación del usuario
+    const userLat = filters?.userLat;
+    const userLng = filters?.userLng;
+    const maxKm = filters?.distanciaMax;
+    const canFilterByDistance = typeof userLat === 'number' && !isNaN(userLat) &&
+      typeof userLng === 'number' && !isNaN(userLng) &&
+      typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
+
+    if (canFilterByDistance) {
+      items = items.filter((item) => {
+        if (item.lat == null || item.lng == null) return false;
+        const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+        return dist <= maxKm!;
+      });
+      // Agregar distancia calculada a cada item para mostrar en el frontend
+      items = items.map((item) => {
+        if (item.lat != null && item.lng != null) {
+          const dist = haversineDistanceKm(userLat!, userLng!, item.lat!, item.lng!);
+          return { ...item, distancia: Math.round(dist * 10) / 10 };
+        }
+        return item;
+      });
+    }
+
+    return items;
   }
 
   async findByPrecioAproximado(precioReferencia: number, margenPorcentaje: number): Promise<MarketItem[]> {
@@ -153,8 +201,11 @@ export class MarketItemRepository implements IMarketItemRepository {
       descripcion: item.descripcion,
       descripcionCompleta: item.descripcionCompleta,
       precio: item.precio,
+      tipoPago: item.tipoPago ?? 'ix',
       rubro: item.rubro,
       ubicacion: item.ubicacion || 'CABA',
+      lat: item.lat,
+      lng: item.lng,
       distancia: item.distancia,
       imagen: item.imagen || '',
       vendedorId: item.vendedorId,
@@ -209,8 +260,11 @@ export class MarketItemRepository implements IMarketItemRepository {
       descripcion: item.descripcion,
       descripcionCompleta: item.descripcionCompleta,
       precio: item.precio,
+      tipoPago: item.tipoPago ?? 'ix',
       rubro: item.rubro,
       ubicacion: item.ubicacion ?? 'CABA',
+      lat: item.lat,
+      lng: item.lng,
       distancia: item.distancia,
       imagen: item.imagen ?? '',
       rating: item.rating ?? 0,
