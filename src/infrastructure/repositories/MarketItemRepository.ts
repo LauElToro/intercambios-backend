@@ -159,7 +159,8 @@ export class MarketItemRepository implements IMarketItemRepository {
 
     if (canFilterByDistance) {
       items = items.filter((item) => {
-        if (item.lat == null || item.lng == null) return true;
+        // Excluir items sin coordenadas: no podemos calcular distancia
+        if (item.lat == null || item.lng == null) return false;
         const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
         return dist <= maxKm!;
       });
