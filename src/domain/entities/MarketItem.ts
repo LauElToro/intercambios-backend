@@ -13,7 +13,6 @@ export class MarketItem {
     public readonly titulo: string,
     public readonly descripcion: string,
     public readonly precio: number,
-    public readonly tipoPago?: string,
     public readonly rubro: 'servicios' | 'productos' | 'alimentos' | 'experiencias',
     public readonly vendedorId: number,
     public readonly descripcionCompleta?: string,
@@ -21,6 +20,7 @@ export class MarketItem {
     public readonly lat?: number,
     public readonly lng?: number,
     public readonly distancia?: number,
+    public readonly tipoPago?: string,
     public readonly imagen?: string,
     public readonly rating?: number,
     public readonly detalles?: Record<string, string>,
@@ -45,12 +45,14 @@ export class MarketItem {
     titulo: string;
     descripcion: string;
     precio: number;
-    tipoPago?: string;
     rubro: 'servicios' | 'productos' | 'alimentos' | 'experiencias';
     vendedorId: number;
     descripcionCompleta?: string;
     ubicacion?: string;
+    lat?: number;
+    lng?: number;
     distancia?: number;
+    tipoPago?: string;
     imagen?: string;
     rating?: number;
     detalles?: Record<string, string>;
@@ -73,7 +75,6 @@ export class MarketItem {
       data.titulo,
       data.descripcion,
       data.precio,
-      data.tipoPago,
       data.rubro,
       data.vendedorId,
       data.descripcionCompleta,
@@ -81,6 +82,7 @@ export class MarketItem {
       data.lat,
       data.lng,
       data.distancia,
+      data.tipoPago,
       data.imagen,
       data.rating,
       data.detalles,

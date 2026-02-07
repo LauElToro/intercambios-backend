@@ -28,9 +28,9 @@ type PrismaItem = {
   vendedorId: number;
   descripcionCompleta: string | null;
   ubicacion: string;
-  lat: number | null;
-  lng: number | null;
-  distancia: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  distancia?: number | null;
   imagen: string;
   rating: number;
   detalles: { clave: string; valor: string }[];
@@ -65,7 +65,6 @@ function mapToEntity(itemData: PrismaItem): MarketItem {
     titulo: itemData.titulo,
     descripcion: itemData.descripcion,
     precio: itemData.precio,
-    tipoPago: itemData.tipoPago ?? undefined,
     rubro: itemData.rubro as 'servicios' | 'productos' | 'alimentos' | 'experiencias',
     vendedorId: itemData.vendedorId,
     descripcionCompleta: itemData.descripcionCompleta ?? undefined,
@@ -73,6 +72,7 @@ function mapToEntity(itemData: PrismaItem): MarketItem {
     lat: itemData.lat ?? undefined,
     lng: itemData.lng ?? undefined,
     distancia: itemData.distancia ?? undefined,
+    tipoPago: itemData.tipoPago ?? undefined,
     imagen: itemData.imagen,
     rating: itemData.rating,
     detalles,
@@ -166,8 +166,37 @@ export class MarketItemRepository implements IMarketItemRepository {
       // Agregar distancia calculada a cada item para mostrar en el frontend
       items = items.map((item) => {
         if (item.lat != null && item.lng != null) {
-          const dist = haversineDistanceKm(userLat!, userLng!, item.lat!, item.lng!);
-          return { ...item, distancia: Math.round(dist * 10) / 10 };
+          const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+          return MarketItem.create({
+            id: item.id,
+            titulo: item.titulo,
+            descripcion: item.descripcion,
+            precio: item.precio,
+            rubro: item.rubro,
+            vendedorId: item.vendedorId,
+            descripcionCompleta: item.descripcionCompleta,
+            ubicacion: item.ubicacion,
+            lat: item.lat,
+            lng: item.lng,
+            distancia: Math.round(dist * 10) / 10,
+            tipoPago: item.tipoPago,
+            imagen: item.imagen,
+            rating: item.rating,
+            detalles: item.detalles,
+            caracteristicas: item.caracteristicas,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            slug: item.slug,
+            status: item.status,
+            condition: item.condition,
+            availability: item.availability,
+            brand: item.brand,
+            metaTitle: item.metaTitle,
+            metaDescription: item.metaDescription,
+            ogImage: item.ogImage,
+            categoryId: item.categoryId,
+            images: item.images,
+          });
         }
         return item;
       });
