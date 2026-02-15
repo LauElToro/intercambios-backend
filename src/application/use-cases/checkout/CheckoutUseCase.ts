@@ -3,6 +3,7 @@ import { IMarketItemRepository } from '../../../domain/repositories/IMarketItemR
 import { IIntercambioRepository } from '../../../domain/repositories/IIntercambioRepository.js';
 import { Intercambio } from '../../../domain/entities/Intercambio.js';
 import prisma from '../../../infrastructure/database/prisma.js';
+import { emailService } from '../../../infrastructure/services/email.service.js';
 
 export interface CheckoutResult {
   intercambio: Intercambio;
@@ -47,7 +48,7 @@ export class CheckoutUseCase {
       throw new Error(`Saldo insuficiente. Podés gastar hasta ${Math.abs(comprador.saldo) + limite} IX (tu saldo + límite negativo)`);
     }
 
-    return await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const compradorActual = await tx.user.findUnique({ where: { id: data.compradorId } });
       const vendedorActual = await tx.user.findUnique({ where: { id: item.vendedorId } });
       if (!compradorActual || !vendedorActual) {
@@ -112,5 +113,14 @@ export class CheckoutUseCase {
         conversacionId: conversacion.id,
       };
     });
+
+    emailService.sendPurchase(comprador.email!, comprador.nombre, item.titulo, item.precio).catch((err) =>
+      console.error('[CheckoutUseCase] Error email compra:', err)
+    );
+    emailService.sendSale(vendedor.email!, vendedor.nombre, item.titulo, item.precio, comprador.nombre).catch((err) =>
+      console.error('[CheckoutUseCase] Error email venta:', err)
+    );
+
+    return result;
   }
 }

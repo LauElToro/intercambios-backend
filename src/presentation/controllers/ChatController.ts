@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
+import { emailService } from '../../infrastructure/services/email.service.js';
 
 export class ChatController {
   static async getConversaciones(req: AuthRequest, res: Response) {
@@ -155,8 +156,9 @@ export class ChatController {
         return res.status(403).json({ error: 'No tenés acceso a esta conversación' });
       }
 
+      const contenidoTrim = contenido.trim();
       const mensaje = await prisma.mensaje.create({
-        data: { conversacionId, senderId: userId, contenido: contenido.trim() },
+        data: { conversacionId, senderId: userId, contenido: contenidoTrim },
         include: { sender: { select: { id: true, nombre: true } } },
       });
 
@@ -164,6 +166,23 @@ export class ChatController {
         where: { id: conversacionId },
         data: { updatedAt: new Date() },
       });
+
+      const convConUsuarios = await prisma.conversacion.findUnique({
+        where: { id: conversacionId },
+        include: {
+          comprador: { select: { id: true, nombre: true, email: true } },
+          vendedor: { select: { id: true, nombre: true, email: true } },
+        },
+      });
+      if (convConUsuarios) {
+        const destinatario = convConUsuarios.compradorId === userId ? convConUsuarios.vendedor : convConUsuarios.comprador;
+        if (destinatario?.email) {
+          const preview = contenidoTrim.replace(/\s+/g, ' ').slice(0, 150);
+          emailService.sendNewMessage(destinatario.email, destinatario.nombre, mensaje.sender.nombre, preview, conversacionId).catch((err) =>
+            console.error('[ChatController] Error enviando email nuevo mensaje:', err)
+          );
+        }
+      }
 
       res.status(201).json({
         id: mensaje.id,
