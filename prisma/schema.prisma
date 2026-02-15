@@ -35,6 +35,12 @@ model User {
   redesSociales Json?     // { instagram, facebook, twitter, linkedin, web }
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  // MFA por email (código 6 dígitos)
+  mfaCode             String?   // Código temporal (hasheado)
+  mfaCodeExpiresAt    DateTime?
+  // Recuperación de contraseña
+  passwordResetToken   String?   @unique
+  passwordResetExpiresAt DateTime?
 
   perfilMercado UserPerfilMercado?
   marketItems   MarketItem[]

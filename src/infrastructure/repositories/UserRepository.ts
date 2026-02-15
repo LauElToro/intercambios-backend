@@ -153,4 +153,50 @@ export class UserRepository implements IUserRepository {
     if (!userData) return null;
     return { user: mapToUser(userData), password: userData.password };
   }
+
+  async setMfaCode(userId: number, hashedCode: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaCode: hashedCode, mfaCodeExpiresAt: expiresAt },
+    });
+  }
+
+  async clearMfaCode(userId: number): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaCode: null, mfaCodeExpiresAt: null },
+    });
+  }
+
+  async getMfaCodeAndExpiry(userId: number): Promise<{ mfaCode: string; mfaCodeExpiresAt: Date } | null> {
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { mfaCode: true, mfaCodeExpiresAt: true },
+    });
+    if (!u?.mfaCode || !u.mfaCodeExpiresAt) return null;
+    return { mfaCode: u.mfaCode, mfaCodeExpiresAt: u.mfaCodeExpiresAt };
+  }
+
+  async setPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordResetToken: token, passwordResetExpiresAt: expiresAt },
+    });
+  }
+
+  async findByPasswordResetToken(token: string): Promise<User | null> {
+    const userData = await prisma.user.findFirst({
+      where: { passwordResetToken: token, passwordResetExpiresAt: { gt: new Date() } },
+      include: { perfilMercado: true },
+    });
+    if (!userData) return null;
+    return mapToUser(userData);
+  }
+
+  async clearPasswordResetToken(userId: number): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordResetToken: null, passwordResetExpiresAt: null },
+    });
+  }
 }

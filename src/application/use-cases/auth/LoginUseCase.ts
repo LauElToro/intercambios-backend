@@ -1,14 +1,18 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { LoginCredentials } from '../../../domain/entities/Auth.js';
+import { SendMfaAndRequireVerificationUseCase } from './SendMfaAndRequireVerificationUseCase.js';
 
 export class LoginUseCase {
-  constructor(private userRepository: IUserRepository) {}
+  private sendMfaUseCase: SendMfaAndRequireVerificationUseCase;
 
-  async execute(credentials: LoginCredentials): Promise<{ token: string; user: any }> {
+  constructor(private userRepository: IUserRepository) {
+    this.sendMfaUseCase = new SendMfaAndRequireVerificationUseCase(userRepository);
+  }
+
+  async execute(credentials: LoginCredentials): Promise<{ mfaRequired: true; mfaToken: string }> {
     const result = await this.userRepository.getUserWithPassword(credentials.email);
-    
+
     if (!result) {
       throw new Error('Credenciales inválidas');
     }
@@ -16,21 +20,13 @@ export class LoginUseCase {
     const { user, password: hashedPassword } = result;
 
     const isValid = await bcrypt.compare(credentials.password, hashedPassword);
-    
+
     if (!isValid) {
       throw new Error('Credenciales inválidas');
     }
 
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '7d' }
-    );
-
-    const userData = typeof (user as any).toJSON === 'function' 
-      ? (user as any).toJSON() 
-      : { ...user, saldo: user.saldo, limite: user.limite };
-    
-    return { token, user: userData };
+    const email = user.email || credentials.email;
+    const { mfaToken } = await this.sendMfaUseCase.execute(user.id, email);
+    return { mfaRequired: true, mfaToken };
   }
 }

@@ -9,4 +9,10 @@ export interface IUserRepository {
   delete(id: number): Promise<void>;
   updatePassword(userId: number, hashedPassword: string): Promise<void>;
   getUserWithPassword(email: string): Promise<{ user: User; password: string } | null>;
+  setMfaCode(userId: number, hashedCode: string, expiresAt: Date): Promise<void>;
+  clearMfaCode(userId: number): Promise<void>;
+  getMfaCodeAndExpiry(userId: number): Promise<{ mfaCode: string; mfaCodeExpiresAt: Date } | null>;
+  setPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void>;
+  findByPasswordResetToken(token: string): Promise<User | null>;
+  clearPasswordResetToken(userId: number): Promise<void>;
 }
