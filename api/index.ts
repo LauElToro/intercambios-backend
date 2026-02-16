@@ -28,9 +28,16 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Middleware
+// CORS: el origen debe coincidir exactamente con lo que envía el navegador (sin barra final).
+// Normalizamos FRONTEND_URL y reflejamos el origen de la petición para evitar 401 por CORS.
+const allowedOrigin = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '*';
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (origin, callback) => {
+    if (allowedOrigin === '*' || !origin) return callback(null, true);
+    const originNormalized = origin.replace(/\/$/, '');
+    if (originNormalized === allowedOrigin) return callback(null, origin);
+    callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
