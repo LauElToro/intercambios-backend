@@ -21,10 +21,13 @@ function safeSend(mailOptions: nodemailer.SendMailOptions): Promise<void> {
     console.log('[EMAIL] Sin SMTP_USER, no se envía:', mailOptions.to, mailOptions.subject);
     return Promise.resolve();
   }
-  return transporter.sendMail(mailOptions).catch((err) => {
-    console.error('[EMAIL] Error enviando:', mailOptions.subject, err.message);
-    if (process.env.NODE_ENV === 'production') throw err;
-  });
+  return transporter
+    .sendMail(mailOptions)
+    .then(() => {})
+    .catch((err) => {
+      console.error('[EMAIL] Error enviando:', mailOptions.subject, err.message);
+      if (process.env.NODE_ENV === 'production') throw err;
+    });
 }
 
 function escapeHtml(s: string): string {
