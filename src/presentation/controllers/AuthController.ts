@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { LoginUseCase } from '../../application/use-cases/auth/LoginUseCase.js';
 import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCase.js';
 import { VerifyMfaUseCase } from '../../application/use-cases/auth/VerifyMfaUseCase.js';
@@ -65,6 +66,33 @@ export class AuthController {
       res.json({ message: 'Contraseña actualizada. Ya podés iniciar sesión.' });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async adminLogin(req: Request, res: Response) {
+    try {
+      const { email, password } = req.body;
+      const adminEmail = process.env.ADMIN_EMAIL;
+      const adminPassword = process.env.ADMIN_PASSWORD;
+
+      if (!adminEmail || !adminPassword) {
+        return res.status(503).json({ error: 'Admin no configurado' });
+      }
+      if (!email || !password) {
+        return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+      }
+      if (email !== adminEmail || password !== adminPassword) {
+        return res.status(401).json({ error: 'Credenciales de admin inválidas' });
+      }
+
+      const token = jwt.sign(
+        { admin: true },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '24h' }
+      );
+      res.json({ token });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   }
 

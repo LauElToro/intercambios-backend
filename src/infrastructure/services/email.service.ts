@@ -188,4 +188,19 @@ export const emailService = {
       text: `${nombreRemitente}: ${textPreview}... Ver en ${chatLink}`,
     });
   },
+
+  async sendNewsletter(to: string, nombre: string, subject: string, bodyHtml: string, bodyText?: string): Promise<void> {
+    const content = `
+      <p style="margin: 0 0 20px 0; font-size: 18px; color: #1a1a1a;">Hola ${escapeHtml(nombre)},</p>
+      <div style="margin: 0 0 24px 0;">${bodyHtml}</div>
+      <p style="margin: 0; color: #666666; font-size: 14px;">— El equipo de ${APP_NAME}</p>
+    `;
+    await safeSend({
+      from: FROM,
+      to,
+      subject,
+      html: emailLayout(content),
+      text: bodyText || bodyHtml.replace(/<[^>]*>/g, '').slice(0, 500),
+    });
+  },
 };

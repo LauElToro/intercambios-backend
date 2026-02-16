@@ -10,6 +10,7 @@ import { uploadRouter } from '../src/presentation/routes/upload.js';
 import { favoritosRouter } from '../src/presentation/routes/favoritos.js';
 import { checkoutRouter } from '../src/presentation/routes/checkout.js';
 import { chatRouter } from '../src/presentation/routes/chat.js';
+import { adminRouter } from '../src/presentation/routes/admin.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
@@ -83,6 +84,7 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/favoritos', favoritosRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/admin', adminRouter);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
