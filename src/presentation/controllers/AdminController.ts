@@ -97,6 +97,7 @@ export class AdminController {
             ubicacion: true,
             miembroDesde: true,
             verificado: true,
+            bannedAt: true,
             _count: { select: { marketItems: true, intercambios: true } },
           },
         }),
@@ -197,6 +198,7 @@ export class AdminController {
       let emails: { email: string; nombre: string }[];
       if (enviarATodos) {
         const users = await prisma.user.findMany({
+          where: { bannedAt: null },
           select: { email: true, nombre: true },
         });
         emails = users.map((u) => ({ email: u.email, nombre: u.nombre }));
@@ -232,6 +234,51 @@ export class AdminController {
         errores: errores.length ? errores.slice(0, 20) : undefined,
       });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /** Banear usuario */
+  static async banUser(req: AdminRequest, res: Response) {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) return res.status(400).json({ error: 'ID inválido' });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { bannedAt: new Date() },
+      });
+      res.json({ message: 'Usuario baneado' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /** Desbanear usuario */
+  static async unbanUser(req: AdminRequest, res: Response) {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) return res.status(400).json({ error: 'ID inválido' });
+      await prisma.user.update({
+        where: { id: userId },
+        data: { bannedAt: null },
+      });
+      res.json({ message: 'Usuario desbaneado' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /** Eliminar usuario (cascade elimina sus productos, favoritos, etc.) */
+  static async deleteUser(req: AdminRequest, res: Response) {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) return res.status(400).json({ error: 'ID inválido' });
+      await prisma.user.delete({ where: { id: userId } });
+      res.json({ message: 'Usuario eliminado' });
+    } catch (error: any) {
+      if ((error as any).code === 'P2025') {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
       res.status(500).json({ error: error.message });
     }
   }

@@ -41,6 +41,7 @@ model User {
   // Recuperación de contraseña
   passwordResetToken   String?   @unique
   passwordResetExpiresAt DateTime?
+  bannedAt             DateTime?   // Si está setado, el usuario está baneado
 
   perfilMercado UserPerfilMercado?
   marketItems   MarketItem[]

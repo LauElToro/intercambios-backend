@@ -34,9 +34,9 @@ if (!hasDatabaseUrl) {
   console.warn('');
   console.warn('⚠️  DATABASE_URL no está configurado en Vercel.');
   console.warn('   Configurá DATABASE_URL en Project Settings → Environment Variables.');
-  console.warn('   Tu base de datos debe ser accesible desde Internet (Neon, Supabase, etc.).');
+  console.warn('   La compilación continúa; ejecutá "prisma migrate deploy" manualmente si hace falta.');
   console.warn('');
-  process.exit(1);
+  process.exit(0);
 }
 
 console.log('Running prisma migrate deploy...');

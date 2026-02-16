@@ -26,7 +26,8 @@ export class AuthController {
       const result = await loginUseCase.execute({ email, password });
       res.json(result);
     } catch (error: any) {
-      res.status(401).json({ error: error.message });
+      const status = error.message === 'Usuario suspendido' ? 403 : 401;
+      res.status(status).json({ error: error.message });
     }
   }
 

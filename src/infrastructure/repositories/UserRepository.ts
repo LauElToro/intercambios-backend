@@ -151,6 +151,9 @@ export class UserRepository implements IUserRepository {
       include: { perfilMercado: true },
     });
     if (!userData) return null;
+    if (userData.bannedAt) {
+      throw new Error('Usuario suspendido');
+    }
     return { user: mapToUser(userData), password: userData.password };
   }
 
