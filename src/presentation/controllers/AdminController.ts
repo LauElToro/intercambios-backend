@@ -45,18 +45,47 @@ export class AdminController {
         _sum: { creditos: true },
       }))._sum.creditos ?? 0;
 
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const [usuariosPorMes, transaccionesPorMes, productosPorEstado, mensajesPorMes] = await Promise.all([
+        prisma.$queryRaw<{ mes: string; total: number }[]>`
+          SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') as mes, count(*)::int as total
+          FROM "User" WHERE "createdAt" >= ${sixMonthsAgo}
+          GROUP BY date_trunc('month', "createdAt") ORDER BY 1`,
+        prisma.$queryRaw<{ mes: string; cantidad: number; volumen: number }[]>`
+          SELECT to_char(date_trunc('month', "fecha"), 'YYYY-MM') as mes, count(*)::int as cantidad, coalesce(sum(abs("creditos")), 0)::int as volumen
+          FROM "Intercambio" WHERE "estado" = 'confirmado' AND "fecha" >= ${sixMonthsAgo}
+          GROUP BY date_trunc('month', "fecha") ORDER BY 1`,
+        prisma.marketItem.groupBy({
+          by: ['status'],
+          _count: { id: true },
+        }),
+        prisma.$queryRaw<{ mes: string; total: number }[]>`
+          SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') as mes, count(*)::int as total
+          FROM "Mensaje" WHERE "createdAt" >= ${sixMonthsAgo}
+          GROUP BY date_trunc('month', "createdAt") ORDER BY 1`,
+      ]);
+
+      const productosPorEstadoChart = productosPorEstado
+        .map((p) => ({ estado: p.status, cantidad: p._count.id }))
+        .sort((a, b) => b.cantidad - a.cantidad);
+
       res.json({
         usuarios: {
           total: usuariosTotal,
+          porMes: usuariosPorMes,
         },
         productos: {
           total: productosTotal,
           activos: productosActivos,
+          porEstado: productosPorEstadoChart,
         },
         ventasCompras: {
           transaccionesTotal: intercambiosConfirmados,
           comprasTotal: intercambiosConfirmados,
           ventasTotal: intercambiosConfirmados,
+          porMes: transaccionesPorMes,
         },
         token: {
           saldoEnCirculacion: saldoTotal,
@@ -68,6 +97,7 @@ export class AdminController {
           conversacionesTotal,
           mensajesTotal,
           paresUnicosContactados: conversacionesTotal,
+          mensajesPorMes,
         },
       });
     } catch (error: any) {
