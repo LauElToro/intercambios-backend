@@ -39,16 +39,24 @@ if (!hasDatabaseUrl) {
   process.exit(0);
 }
 
+const hasDirectUrl = !!process.env.DIRECT_DATABASE_URL;
+if (!hasDirectUrl) {
+  console.warn('');
+  console.warn('⚠️  DIRECT_DATABASE_URL no está configurado.');
+  console.warn('   Para evitar timeout en migraciones (advisory lock), configurá DIRECT_DATABASE_URL en Vercel');
+  console.warn('   con la URL directa a Postgres (sin pool). Si usás Prisma Accelerate: DATABASE_URL = accelerate, DIRECT_DATABASE_URL = postgres://...');
+  console.warn('');
+}
+
 console.log('Running prisma migrate deploy...');
 try {
   run(`npx prisma migrate deploy --schema=${schemaPath}`);
 } catch (err) {
   console.error('');
   console.error('❌ prisma migrate deploy falló. Posibles causas:');
-  console.error('   - DATABASE_URL incorrecto o base inaccesible');
-  console.error('   - Si usás connection pooling (Neon, Supabase): agregá directUrl al schema:');
-  console.error('     datasource db { provider = "postgresql" url = env("DATABASE_URL") directUrl = env("DIRECT_DATABASE_URL") }');
-  console.error('   - Firewall bloqueando conexiones desde Vercel');
+  console.error('   - Timeout advisory lock: añadí DIRECT_DATABASE_URL en Vercel con la URL directa a Postgres (no Accelerate).');
+  console.error('   - DATABASE_URL incorrecto o base inaccesible desde Vercel.');
+  console.error('   - Firewall o red bloqueando la conexión.');
   console.error('');
   process.exit(1);
 }
