@@ -6,6 +6,7 @@ export interface MarketItemFilters {
   precioMin?: number;
   precioMax?: number;
   vendedorId?: number;
+  search?: string;
   status?: string; // default 'active' para listados y feeds
   userLat?: number;
   userLng?: number;

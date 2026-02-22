@@ -139,6 +139,21 @@ export class MarketItemRepository implements IMarketItemRepository {
       where.status = filters.status;
     }
 
+    // Búsqueda con match ~70%: al menos 70% de las palabras deben aparecer en título o descripción
+    const searchWords = filters?.search?.trim()
+      ? filters.search.trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
+      : [];
+    const hasSearch = searchWords.length > 0;
+
+    if (hasSearch) {
+      where.OR = searchWords.map((w) => ({
+        OR: [
+          { titulo: { contains: w, mode: 'insensitive' as const } },
+          { descripcion: { contains: w, mode: 'insensitive' as const } },
+        ],
+      }));
+    }
+
     const userLat = filters?.userLat;
     const userLng = filters?.userLng;
     const maxKm = filters?.distanciaMax;
@@ -146,9 +161,10 @@ export class MarketItemRepository implements IMarketItemRepository {
       typeof userLng === 'number' && !isNaN(userLng) &&
       typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
 
-    const findManyOptions: { skip?: number; take: number } = canFilterByDistance
-      ? { take: 2000 }
-      : { skip: (page - 1) * limit, take: limit };
+    const findManyOptions: { skip?: number; take: number } =
+      canFilterByDistance || hasSearch
+        ? { take: 2000 }
+        : { skip: (page - 1) * limit, take: limit };
 
     const itemsData = await prisma.marketItem.findMany({
       where,
@@ -163,19 +179,34 @@ export class MarketItemRepository implements IMarketItemRepository {
 
     let items = itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
 
+    // Filtrar por match ~70% cuando hay búsqueda
+    if (hasSearch) {
+      const umbral = 0.7;
+      items = items.filter((item) => {
+        const texto = `${(item.titulo || '')} ${(item.descripcion || '')}`.toLowerCase();
+        const matches = searchWords.filter((w) => texto.includes(w)).length;
+        return matches / searchWords.length >= umbral;
+      });
+    }
+
     if (canFilterByDistance) {
       items = items.filter((item) => {
         if (item.lat == null || item.lng == null) return false;
         const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
         return dist <= maxKm!;
       });
+    }
+
+    // Paginar cuando se filtró en memoria (distancia o búsqueda)
+    if (canFilterByDistance || hasSearch) {
       const total = items.length;
       const start = (page - 1) * limit;
       items = items.slice(start, start + limit);
-      items = items.map((item) => {
-        if (item.lat != null && item.lng != null) {
-          const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
-          return MarketItem.create({
+      if (canFilterByDistance) {
+        items = items.map((item) => {
+          if (item.lat != null && item.lng != null) {
+            const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+            return MarketItem.create({
             id: item.id,
             titulo: item.titulo,
             descripcion: item.descripcion,
@@ -207,7 +238,8 @@ export class MarketItemRepository implements IMarketItemRepository {
           });
         }
         return item;
-      });
+        });
+      }
       return {
         data: items,
         total,

@@ -23,12 +23,16 @@ export class MarketController {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 24));
 
+      const searchParam = req.query.search;
+      const search = typeof searchParam === 'string' && searchParam.trim() ? searchParam.trim() : undefined;
+
       const filters = {
         rubro: req.query.rubro as string,
         tipo: req.query.tipo as 'productos' | 'servicios',
         precioMin: req.query.precioMin ? Number(req.query.precioMin) : undefined,
         precioMax: req.query.precioMax ? Number(req.query.precioMax) : undefined,
         vendedorId: req.query.vendedorId ? Number(req.query.vendedorId) : undefined,
+        search,
         userLat: hasValidLocation ? userLat : undefined,
         userLng: hasValidLocation ? userLng : undefined,
         distanciaMax: hasValidLocation ? distanciaMax : undefined,
