@@ -13,6 +13,7 @@ import { chatRouter } from '../src/presentation/routes/chat.js';
 import { adminRouter } from '../src/presentation/routes/admin.js';
 import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
+import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
 // Cargar variables de entorno
@@ -77,6 +78,12 @@ app.get('/api/health', (req: Request, res: Response) => {
 app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/coincidencias', coincidenciasRouter);
+
+// Perfil público: ver perfiles sin login (id numérico; /me va al router protegido)
+app.get('/api/users/:id', (req, res, next) => {
+  if (req.params.id === 'me') return next();
+  return UserController.getPublicProfile(req, res);
+});
 
 // Protected routes
 app.use('/api/users', authMiddleware, usersRouter);

@@ -34,6 +34,37 @@ export class UserController {
     }
   }
 
+  /** Perfil público: sin email, saldo ni contacto (para visitantes no logueados) */
+  static async getPublicProfile(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const user = await userRepository.findById(id);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      const safe = {
+        id: user.id,
+        nombre: user.nombre,
+        ubicacion: user.ubicacion,
+        rating: user.rating,
+        totalResenas: user.totalResenas,
+        miembroDesde: user.miembroDesde,
+        verificado: user.verificado,
+        bio: user.bio,
+        fotoPerfil: user.fotoPerfil,
+        banner: user.banner,
+        redesSociales: user.redesSociales,
+        ofrece: user.ofrece,
+        necesita: user.necesita,
+      };
+      res.json(safe);
+    } catch (error) {
+      res.status(500).json({ error: 'Error al obtener usuario' });
+    }
+  }
+
   static async createUser(req: Request, res: Response) {
     try {
       const user = await createUserUseCase.execute(req.body);
