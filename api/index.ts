@@ -11,6 +11,7 @@ import { favoritosRouter } from '../src/presentation/routes/favoritos.js';
 import { checkoutRouter } from '../src/presentation/routes/checkout.js';
 import { chatRouter } from '../src/presentation/routes/chat.js';
 import { adminRouter } from '../src/presentation/routes/admin.js';
+import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
@@ -82,6 +83,7 @@ app.use('/api/users', authMiddleware, usersRouter);
 app.use('/api/intercambios', intercambiosRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/favoritos', favoritosRouter);
+app.use('/api/busquedas', busquedasRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);

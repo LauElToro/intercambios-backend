@@ -429,6 +429,35 @@ async function runSchemaSync(): Promise<void> {
         // ignorar
       }
     }
+
+    // Busqueda (historial de búsquedas para personalización y métricas)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Busqueda" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "termino" TEXT NOT NULL,
+          "seccion" TEXT NOT NULL,
+          "filtros" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Busqueda_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_userId_idx" ON "Busqueda"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_seccion_idx" ON "Busqueda"("seccion");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_createdAt_idx" ON "Busqueda"("createdAt");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Busqueda_userId_fkey') THEN
+            ALTER TABLE "Busqueda" ADD CONSTRAINT "Busqueda_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
   } catch (err) {
     console.error('[ensureSchema]', err);
     // No relanzar: la app puede seguir y quizá la DB ya está bien

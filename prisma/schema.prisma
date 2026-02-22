@@ -54,6 +54,7 @@ model User {
   conversacionesComprador   Conversacion[] @relation("ConversacionesComoComprador")
   conversacionesVendedor    Conversacion[] @relation("ConversacionesComoVendedor")
   mensajesEnviados          Mensaje[]      @relation("MensajesUsuario")
+  busquedas                 Busqueda[]
 
   @@index([email])
   @@index([ubicacion])
@@ -285,4 +286,24 @@ model Mensaje {
 
   @@index([conversacionId])
   @@index([senderId])
+}
+
+// -----------------------------------------------------------------------------
+// BÚSQUEDAS - Historial para personalización y métricas admin
+// Solo se registran si el usuario acepta cookies de preferencias
+// -----------------------------------------------------------------------------
+
+model Busqueda {
+  id        Int      @id @default(autoincrement())
+  userId    Int      // Usuario logueado que realizó la búsqueda
+  termino   String   @db.Text  // Texto buscado (vacío si solo filtros)
+  seccion   String   // 'market' | 'coincidencias'
+  filtros   Json?    // { rubro, tipo, precioMin, precioMax, ... }
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([seccion])
+  @@index([createdAt])
 }

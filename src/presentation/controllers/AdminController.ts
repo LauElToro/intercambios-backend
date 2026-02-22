@@ -48,7 +48,7 @@ export class AdminController {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-      const [usuariosPorMes, transaccionesPorMes, productosPorEstado, mensajesPorMes] = await Promise.all([
+      const [usuariosPorMes, transaccionesPorMes, productosPorEstado, mensajesPorMes, busquedasTotal, busquedasPorMes, terminosPopulares] = await Promise.all([
         prisma.$queryRaw<{ mes: string; total: number }[]>`
           SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') as mes, count(*)::int as total
           FROM "User" WHERE "createdAt" >= ${sixMonthsAgo}
@@ -65,6 +65,15 @@ export class AdminController {
           SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') as mes, count(*)::int as total
           FROM "Mensaje" WHERE "createdAt" >= ${sixMonthsAgo}
           GROUP BY date_trunc('month', "createdAt") ORDER BY 1`,
+        prisma.busqueda.count(),
+        prisma.$queryRaw<{ mes: string; total: number }[]>`
+          SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') as mes, count(*)::int as total
+          FROM "Busqueda" WHERE "createdAt" >= ${sixMonthsAgo}
+          GROUP BY date_trunc('month', "createdAt") ORDER BY 1`,
+        prisma.$queryRaw<{ termino: string; total: number }[]>`
+          SELECT "termino" as termino, count(*)::int as total
+          FROM "Busqueda" WHERE "termino" != '' AND "createdAt" >= ${sixMonthsAgo}
+          GROUP BY "termino" ORDER BY total DESC LIMIT 20`,
       ]);
 
       const productosPorEstadoChart = productosPorEstado
@@ -98,6 +107,11 @@ export class AdminController {
           mensajesTotal,
           paresUnicosContactados: conversacionesTotal,
           mensajesPorMes,
+        },
+        busquedas: {
+          total: busquedasTotal,
+          porMes: busquedasPorMes,
+          terminosPopulares: terminosPopulares || [],
         },
       });
     } catch (error: any) {
