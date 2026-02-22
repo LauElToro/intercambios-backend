@@ -1,5 +1,5 @@
 import { MarketItem } from '../../domain/entities/MarketItem.js';
-import { IMarketItemRepository, MarketItemFilters } from '../../domain/repositories/IMarketItemRepository.js';
+import { IMarketItemRepository, MarketItemFilters, PaginatedResult } from '../../domain/repositories/IMarketItemRepository.js';
 import prisma from '../database/prisma.js';
 
 /** Distancia en km entre dos puntos (fórmula de Haversine) */
@@ -107,8 +107,10 @@ export class MarketItemRepository implements IMarketItemRepository {
     return mapToEntity(itemData as PrismaItem);
   }
 
-  async findAll(filters?: MarketItemFilters): Promise<MarketItem[]> {
-    const where: any = {};
+  async findAll(filters?: MarketItemFilters): Promise<PaginatedResult<MarketItem>> {
+    const page = Math.max(1, filters?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters?.limit ?? 24));
+    const where: any = { status: 'active' };
 
     if (filters?.rubro && filters.rubro !== 'todos') {
       where.rubro = filters.rubro;
@@ -137,6 +139,17 @@ export class MarketItemRepository implements IMarketItemRepository {
       where.status = filters.status;
     }
 
+    const userLat = filters?.userLat;
+    const userLng = filters?.userLng;
+    const maxKm = filters?.distanciaMax;
+    const canFilterByDistance = typeof userLat === 'number' && !isNaN(userLat) &&
+      typeof userLng === 'number' && !isNaN(userLng) &&
+      typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
+
+    const findManyOptions: { skip?: number; take: number } = canFilterByDistance
+      ? { take: 2000 }
+      : { skip: (page - 1) * limit, take: limit };
+
     const itemsData = await prisma.marketItem.findMany({
       where,
       include: {
@@ -145,26 +158,20 @@ export class MarketItemRepository implements IMarketItemRepository {
         images: { orderBy: { position: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
+      ...findManyOptions,
     });
 
     let items = itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
 
-    // Filtrar por distancia si se proporciona ubicación del usuario
-    const userLat = filters?.userLat;
-    const userLng = filters?.userLng;
-    const maxKm = filters?.distanciaMax;
-    const canFilterByDistance = typeof userLat === 'number' && !isNaN(userLat) &&
-      typeof userLng === 'number' && !isNaN(userLng) &&
-      typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
-
     if (canFilterByDistance) {
       items = items.filter((item) => {
-        // Excluir items sin coordenadas: no podemos calcular distancia
         if (item.lat == null || item.lng == null) return false;
         const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
         return dist <= maxKm!;
       });
-      // Agregar distancia calculada a cada item para mostrar en el frontend
+      const total = items.length;
+      const start = (page - 1) * limit;
+      items = items.slice(start, start + limit);
       items = items.map((item) => {
         if (item.lat != null && item.lng != null) {
           const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
@@ -201,9 +208,23 @@ export class MarketItemRepository implements IMarketItemRepository {
         }
         return item;
       });
+      return {
+        data: items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      };
     }
 
-    return items;
+    const total = await prisma.marketItem.count({ where });
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
   }
 
   async findByPrecioAproximado(precioReferencia: number, margenPorcentaje: number): Promise<MarketItem[]> {

@@ -20,6 +20,9 @@ export class MarketController {
         typeof userLng === 'number' && !isNaN(userLng) &&
         typeof distanciaMax === 'number' && !isNaN(distanciaMax) && distanciaMax > 0;
 
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 24));
+
       const filters = {
         rubro: req.query.rubro as string,
         tipo: req.query.tipo as 'productos' | 'servicios',
@@ -29,10 +32,12 @@ export class MarketController {
         userLat: hasValidLocation ? userLat : undefined,
         userLng: hasValidLocation ? userLng : undefined,
         distanciaMax: hasValidLocation ? distanciaMax : undefined,
+        page,
+        limit,
       };
 
-      const items = await getMarketItemsUseCase.execute(filters);
-      res.json(items);
+      const result = await getMarketItemsUseCase.execute(filters);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener items del market' });
     }

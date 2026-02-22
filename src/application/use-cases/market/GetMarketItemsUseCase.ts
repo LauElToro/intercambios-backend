@@ -4,7 +4,7 @@ import { IMarketItemRepository, MarketItemFilters } from '../../../domain/reposi
 export class GetMarketItemsUseCase {
   constructor(private marketItemRepository: IMarketItemRepository) {}
 
-  async execute(filters?: MarketItemFilters): Promise<MarketItem[]> {
-    return await this.marketItemRepository.findAll(filters);
+  async execute(filters?: MarketItemFilters): Promise<{ data: MarketItem[]; total: number; page: number; limit: number; totalPages: number }> {
+    return this.marketItemRepository.findAll(filters);
   }
 }
