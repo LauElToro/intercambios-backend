@@ -458,6 +458,37 @@ async function runSchemaSync(): Promise<void> {
     } catch {
       // ya existe
     }
+
+    // Notificacion
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Notificacion" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "tipo" TEXT NOT NULL,
+          "titulo" TEXT NOT NULL,
+          "mensaje" TEXT,
+          "leido" BOOLEAN NOT NULL DEFAULT false,
+          "metadata" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Notificacion_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_userId_idx" ON "Notificacion"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_leido_idx" ON "Notificacion"("leido");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_createdAt_idx" ON "Notificacion"("createdAt");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Notificacion_userId_fkey') THEN
+            ALTER TABLE "Notificacion" ADD CONSTRAINT "Notificacion_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
   } catch (err) {
     console.error('[ensureSchema]', err);
     // No relanzar: la app puede seguir y quizá la DB ya está bien

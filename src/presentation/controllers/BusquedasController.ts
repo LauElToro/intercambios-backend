@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../../infrastructure/database/prisma.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
+import { notificationService } from '../../infrastructure/services/notification.service.js';
 
 export class BusquedasController {
   /** Registrar una búsqueda (solo si el usuario aceptó cookies de preferencias) */
@@ -28,6 +29,38 @@ export class BusquedasController {
           filtros: filtrosObj,
         },
       });
+
+      // Notificar vendedores cuyos productos coincidieron con la búsqueda (async, no bloquea)
+      if (terminoStr.length >= 2) {
+        const term = terminoStr.toLowerCase();
+        const items = await prisma.marketItem.findMany({
+          where: {
+            status: 'active',
+            vendedorId: { not: userId },
+            OR: [
+              { titulo: { contains: term, mode: 'insensitive' } },
+              { descripcion: { contains: term, mode: 'insensitive' } },
+            ],
+          },
+          select: { vendedorId: true, titulo: true },
+          take: 20,
+        });
+        const vendedoresMap = new Map<number, string>();
+        for (const i of items) {
+          if (!vendedoresMap.has(i.vendedorId)) vendedoresMap.set(i.vendedorId, i.titulo);
+        }
+        for (const [vId, titulo] of vendedoresMap) {
+          notificationService
+            .create({
+              userId: vId,
+              tipo: 'apareciste_busquedas',
+              titulo: 'Apareciste en una búsqueda',
+              mensaje: `"${titulo}" coincidió con una búsqueda reciente.`,
+              metadata: { producto: titulo },
+            })
+            .catch(() => {});
+        }
+      }
 
       res.status(201).json({ ok: true });
     } catch (error: any) {

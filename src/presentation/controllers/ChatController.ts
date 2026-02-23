@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { emailService } from '../../infrastructure/services/email.service.js';
+import { notificationService } from '../../infrastructure/services/notification.service.js';
 
 export class ChatController {
   static async getConversaciones(req: AuthRequest, res: Response) {
@@ -176,6 +177,10 @@ export class ChatController {
       });
       if (convConUsuarios) {
         const destinatario = convConUsuarios.compradorId === userId ? convConUsuarios.vendedor : convConUsuarios.comprador;
+        if (destinatario?.id) {
+          const preview = contenidoTrim.replace(/\s+/g, ' ').slice(0, 150);
+          notificationService.onNuevoMensaje(destinatario.id, mensaje.sender.nombre, conversacionId, preview).catch(() => {});
+        }
         if (destinatario?.email) {
           const preview = contenidoTrim.replace(/\s+/g, ' ').slice(0, 150);
           emailService.sendNewMessage(destinatario.email, destinatario.nombre, mensaje.sender.nombre, preview, conversacionId).catch((err) =>

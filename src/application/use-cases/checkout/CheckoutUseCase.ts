@@ -4,6 +4,7 @@ import { IIntercambioRepository } from '../../../domain/repositories/IIntercambi
 import { Intercambio } from '../../../domain/entities/Intercambio.js';
 import prisma from '../../../infrastructure/database/prisma.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
+import { notificationService } from '../../../infrastructure/services/notification.service.js';
 
 export interface CheckoutResult {
   intercambio: Intercambio;
@@ -113,6 +114,9 @@ export class CheckoutUseCase {
         conversacionId: conversacion.id,
       };
     });
+
+    notificationService.onCompra(data.compradorId, item.titulo, item.precio).catch(() => {});
+    notificationService.onVenta(item.vendedorId, item.titulo, comprador.nombre, item.precio).catch(() => {});
 
     emailService.sendPurchase(comprador.email!, comprador.nombre, item.titulo, item.precio).catch((err) =>
       console.error('[CheckoutUseCase] Error email compra:', err)

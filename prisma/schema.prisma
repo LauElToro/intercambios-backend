@@ -55,6 +55,7 @@ model User {
   conversacionesVendedor    Conversacion[] @relation("ConversacionesComoVendedor")
   mensajesEnviados          Mensaje[]      @relation("MensajesUsuario")
   busquedas                 Busqueda[]
+  notificaciones            Notificacion[]
 
   @@index([email])
   @@index([ubicacion])
@@ -305,5 +306,26 @@ model Busqueda {
 
   @@index([userId])
   @@index([seccion])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICACIONES - Alertas por mensaje, compra, venta, búsquedas, etc.
+// -----------------------------------------------------------------------------
+
+model Notificacion {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  tipo       String   // 'mensaje' | 'compra' | 'venta' | 'apareciste_busquedas' | 'producto_mas_buscado' | 'nuevo_favorito'
+  titulo     String   @db.Text
+  mensaje    String?  @db.Text
+  leido      Boolean  @default(false)
+  metadata   Json?    // { conversacionId, intercambioId, marketItemId, etc }
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([leido])
   @@index([createdAt])
 }

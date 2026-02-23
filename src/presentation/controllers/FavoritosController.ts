@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../../infrastructure/database/prisma.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
+import { notificationService } from '../../infrastructure/services/notification.service.js';
 
 export class FavoritosController {
   static async getFavoritos(req: AuthRequest, res: Response) {
@@ -58,6 +59,19 @@ export class FavoritosController {
         await prisma.favorito.create({
           data: { userId, marketItemId },
         });
+        const item = await prisma.marketItem.findUnique({ where: { id: marketItemId }, select: { vendedorId: true, titulo: true } });
+        const quien = await prisma.user.findUnique({ where: { id: userId }, select: { nombre: true } });
+        if (item && item.vendedorId !== userId && quien) {
+          notificationService
+            .create({
+              userId: item.vendedorId,
+              tipo: 'nuevo_favorito',
+              titulo: 'Tu producto fue agregado a favoritos',
+              mensaje: `${quien.nombre} guardó "${item.titulo}" en sus favoritos.`,
+              metadata: { marketItemId },
+            })
+            .catch(() => {});
+        }
         return res.json({ favorito: true, message: 'Agregado a favoritos' });
       }
     } catch (error: any) {
