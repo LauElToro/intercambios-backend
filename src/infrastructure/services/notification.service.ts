@@ -2,6 +2,7 @@
  * Servicio para crear notificaciones cuando ocurren acciones en la cuenta.
  */
 
+import type { Prisma } from '@prisma/client';
 import prisma from '../database/prisma.js';
 
 export type TipoNotificacion =
@@ -23,13 +24,16 @@ export interface CreateNotificationParams {
 export const notificationService = {
   async create(params: CreateNotificationParams): Promise<void> {
     try {
+      const metadata: Prisma.InputJsonValue | undefined =
+        params.metadata != null ? (params.metadata as Prisma.InputJsonValue) : undefined;
+
       await prisma.notificacion.create({
         data: {
           userId: params.userId,
           tipo: params.tipo,
           titulo: params.titulo,
           mensaje: params.mensaje ?? null,
-          metadata: params.metadata ? (params.metadata as object) : null,
+          ...(metadata !== undefined && { metadata }),
         },
       });
     } catch (err) {
