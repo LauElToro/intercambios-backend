@@ -46,7 +46,7 @@ export class CheckoutUseCase {
 
     const limite = comprador.limite ?? 150000;
     if (!comprador.puedeRealizarIntercambio(item.precio, limite)) {
-      throw new Error(`Saldo insuficiente. Podés gastar hasta ${Math.abs(comprador.saldo) + limite} IX (tu saldo + límite negativo)`);
+      throw new Error(`Saldo insuficiente. Podés gastar hasta ${Math.abs(comprador.saldo) + limite} IOX (tu saldo + límite negativo)`);
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -95,6 +95,12 @@ export class CheckoutUseCase {
           intercambioId: intercambio.id,
         },
         update: { marketItemId: data.marketItemId, intercambioId: intercambio.id, updatedAt: new Date() },
+      });
+
+      // Marcar producto como vendido para que no siga apareciendo en el market
+      await tx.marketItem.update({
+        where: { id: data.marketItemId },
+        data: { status: 'sold', availability: 'out_of_stock' },
       });
 
       return {
