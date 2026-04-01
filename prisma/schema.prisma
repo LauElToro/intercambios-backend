@@ -46,6 +46,14 @@ model User {
   passwordResetExpiresAt DateTime?
   bannedAt             DateTime?   // Si está setado, el usuario está baneado
 
+  // Referidos
+  referralCode     String   @unique @default(cuid())
+  referralSlug     String?  @unique
+  referredById     Int?
+  referralCodeUsed String?
+  referredBy       User?    @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers    User[]   @relation("UserReferrals")
+
   perfilMercado UserPerfilMercado?
   marketItems   MarketItem[]
   favoritos     Favorito[]
@@ -59,6 +67,9 @@ model User {
 
   @@index([email])
   @@index([ubicacion])
+  @@index([referralCode])
+  @@index([referralSlug])
+  @@index([referredById])
 }
 
 // Perfil de mercado por usuario: qué ofrece, qué necesita, crédito/precio oferta custom.
@@ -269,9 +280,10 @@ model Conversacion {
   marketItem    MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
   mensajes      Mensaje[]
 
-  @@unique([compradorId, vendedorId])
   @@index([compradorId])
   @@index([vendedorId])
+  @@index([marketItemId])
+  @@index([intercambioId])
 }
 
 model Mensaje {

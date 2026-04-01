@@ -228,6 +228,73 @@ export class AdminController {
     }
   }
 
+  /** Referidos: listado de usuarios referidos y su referente */
+  static async getReferidos(req: AdminRequest, res: Response) {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+      const skip = (page - 1) * limit;
+
+      const where = { referredById: { not: null } as any };
+
+      const [rows, total, countsByRef] = await Promise.all([
+        prisma.user.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            nombre: true,
+            email: true,
+            createdAt: true,
+            referralCodeUsed: true,
+            referredById: true,
+            referredBy: { select: { id: true, nombre: true, email: true } },
+          },
+        }),
+        prisma.user.count({ where }),
+        prisma.user.groupBy({
+          by: ['referredById'],
+          where,
+          _count: { _all: true },
+        }),
+      ]);
+
+      const mapCounts = new Map<number, number>();
+      for (const c of countsByRef as any[]) {
+        if (c.referredById != null) mapCounts.set(c.referredById, c._count._all);
+      }
+
+      const usuariosQueRefirieron = mapCounts.size;
+
+      res.json({
+        data: rows.map((u) => ({
+          referidoId: u.id,
+          referidoNombre: u.nombre,
+          referidoEmail: u.email,
+          referenteId: u.referredBy?.id ?? null,
+          referenteNombre: u.referredBy?.nombre ?? null,
+          referenteEmail: u.referredBy?.email ?? null,
+          codigoUsado: u.referralCodeUsed ?? null,
+          referidosDelReferente: u.referredById != null ? (mapCounts.get(u.referredById) ?? 0) : 0,
+          fechaRegistro: u.createdAt.toISOString(),
+        })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        resumen: {
+          totalRegistrosConReferente: total,
+          usuariosQueRefirieron,
+          totalReferidos: total,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
   /** Enviar newsletter a todos los usuarios (o a una lista de emails) */
   static async sendNewsletter(req: AdminRequest, res: Response) {
     try {

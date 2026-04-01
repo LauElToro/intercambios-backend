@@ -13,4 +13,5 @@ adminRouter.post('/users/:id/unban', AdminController.unbanUser);
 adminRouter.delete('/users/:id', AdminController.deleteUser);
 adminRouter.get('/productos', AdminController.getProductos);
 adminRouter.get('/intercambios', AdminController.getIntercambios);
+adminRouter.get('/referidos', AdminController.getReferidos);
 adminRouter.post('/newsletter', AdminController.sendNewsletter);

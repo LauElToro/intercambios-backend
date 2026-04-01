@@ -13,6 +13,7 @@ import { chatRouter } from '../src/presentation/routes/chat.js';
 import { adminRouter } from '../src/presentation/routes/admin.js';
 import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../src/presentation/routes/notificaciones.js';
+import { referidosRouter } from '../src/presentation/routes/referidos.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
@@ -96,6 +97,7 @@ app.use('/api/notificaciones', notificacionesRouter);
 app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/referidos', referidosRouter);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

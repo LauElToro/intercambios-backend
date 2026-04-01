@@ -7,6 +7,13 @@ import { coincidenciasRouter } from '../presentation/routes/coincidencias.js';
 import { intercambiosRouter } from '../presentation/routes/intercambios.js';
 import { authRouter } from '../presentation/routes/auth.js';
 import { uploadRouter } from '../presentation/routes/upload.js';
+import { favoritosRouter } from '../presentation/routes/favoritos.js';
+import { checkoutRouter } from '../presentation/routes/checkout.js';
+import { chatRouter } from '../presentation/routes/chat.js';
+import { adminRouter } from '../presentation/routes/admin.js';
+import { busquedasRouter } from '../presentation/routes/busquedas.js';
+import { notificacionesRouter } from '../presentation/routes/notificaciones.js';
+import { referidosRouter } from '../presentation/routes/referidos.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
 
 dotenv.config();
@@ -32,6 +39,13 @@ app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/users', authMiddleware, usersRouter);
 app.use('/api/intercambios', intercambiosRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/favoritos', favoritosRouter);
+app.use('/api/busquedas', busquedasRouter);
+app.use('/api/notificaciones', notificacionesRouter);
+app.use('/api/checkout', checkoutRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/referidos', referidosRouter);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -14,4 +14,6 @@ export interface RegisterData {
   password: string;
   contacto: string;
   ubicacion?: string;
+  /** Código o slug del referente (opcional). */
+  codigoReferido?: string;
 }

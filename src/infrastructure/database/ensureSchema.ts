@@ -39,6 +39,11 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'miembroDesde');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'ubicacion');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'verificado');
+          -- Referidos
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER', tname, 'referredById');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCodeUsed');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'createdAt');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'updatedAt');
         END IF;
@@ -75,6 +80,19 @@ async function runSchemaSync(): Promise<void> {
         await prisma.$executeRawUnsafe(`UPDATE "user" SET "ubicacion" = 'CABA' WHERE "ubicacion" IS NULL;`);
       } catch {
         // ignorar
+      }
+    }
+
+    // Backfill referralCode y crear índices únicos (si faltan)
+    // Usamos un valor determinístico por id para evitar colisiones.
+    for (const t of ['"User"', '"user"'] as const) {
+      try {
+        await prisma.$executeRawUnsafe(`UPDATE ${t} SET "referralCode" = ('ref-' || "id"::text) WHERE "referralCode" IS NULL OR "referralCode" = '';`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralCode_key" ON ${t}("referralCode");`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralSlug_key" ON ${t}("referralSlug") WHERE "referralSlug" IS NOT NULL;`);
+        await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_referredById_idx" ON ${t}("referredById");`);
+      } catch {
+        // ignorar (tabla no existe o permisos)
       }
     }
 
@@ -370,7 +388,25 @@ async function runSchemaSync(): Promise<void> {
           CONSTRAINT "Conversacion_pkey" PRIMARY KEY ("id")
         );
       `);
-      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Conversacion_compradorId_vendedorId_key" ON "Conversacion"("compradorId", "vendedorId");`);
+      // Antes: unique por (compradorId, vendedorId) mezclaba chats de compras distintas.
+      // Ahora: único por intercambioId (cuando no es NULL) y único por (compradorId,vendedorId,marketItemId) para contacto pre-compra.
+      try {
+        await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Conversacion_compradorId_vendedorId_key";`);
+      } catch {
+        // ignorar
+      }
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Conversacion_intercambioId_key"
+        ON "Conversacion"("intercambioId")
+        WHERE "intercambioId" IS NOT NULL;
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Conversacion_comprador_vendedor_marketItemId_key"
+        ON "Conversacion"("compradorId","vendedorId","marketItemId")
+        WHERE "marketItemId" IS NOT NULL AND "intercambioId" IS NULL;
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Conversacion_compradorId_idx" ON "Conversacion"("compradorId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Conversacion_vendedorId_idx" ON "Conversacion"("vendedorId");`);
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "Mensaje" (
           "id" SERIAL NOT NULL,

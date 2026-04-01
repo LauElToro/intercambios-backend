@@ -44,13 +44,55 @@ export class ChatController {
     }
   }
 
-  /** Iniciar o obtener conversación con un vendedor. Acepta marketItemId o vendedorId */
+  /** Iniciar o obtener conversación con un vendedor. Acepta intercambioId, marketItemId o vendedorId */
   static async iniciarConversacion(req: AuthRequest, res: Response) {
     try {
-      const compradorId = req.userId;
+      const requesterId = req.userId;
+      const intercambioId = req.body.intercambioId != null ? parseInt(req.body.intercambioId) : null;
       const marketItemId = req.body.marketItemId != null ? parseInt(req.body.marketItemId) : null;
       const vendedorIdParam = req.body.vendedorId != null ? parseInt(req.body.vendedorId) : null;
-      if (!compradorId) return res.status(401).json({ error: 'No autorizado' });
+      if (!requesterId) return res.status(401).json({ error: 'No autorizado' });
+
+      // Caso 1: conversación por intercambio (una por compra/operación)
+      if (intercambioId && !isNaN(intercambioId)) {
+        const intercambio = await prisma.intercambio.findUnique({
+          where: { id: intercambioId },
+          select: { id: true, usuarioId: true, otraPersonaId: true, marketItemId: true },
+        });
+        if (!intercambio) return res.status(404).json({ error: 'Intercambio no encontrado' });
+        if (requesterId !== intercambio.usuarioId && requesterId !== intercambio.otraPersonaId) {
+          return res.status(403).json({ error: 'No tenés acceso a este intercambio' });
+        }
+
+        const compradorId = intercambio.usuarioId;
+        const vendedorId = intercambio.otraPersonaId;
+
+        let conversacion = await prisma.conversacion.findFirst({
+          where: { intercambioId: intercambio.id },
+          select: { id: true },
+        });
+        if (!conversacion) {
+          try {
+            conversacion = await prisma.conversacion.create({
+              data: {
+                compradorId,
+                vendedorId,
+                marketItemId: intercambio.marketItemId ?? null,
+                intercambioId: intercambio.id,
+              },
+              select: { id: true },
+            });
+          } catch {
+            // carrera: si ya la creó otro request, volver a buscar
+            conversacion = await prisma.conversacion.findFirst({
+              where: { intercambioId: intercambio.id },
+              select: { id: true },
+            });
+          }
+        }
+
+        return res.status(200).json({ conversacionId: conversacion!.id });
+      }
 
       let vendedorId: number;
       let marketItemIdFinal: number | null = null;
@@ -69,24 +111,33 @@ export class ChatController {
         return res.status(400).json({ error: 'Falta marketItemId o vendedorId' });
       }
 
+      const compradorId = requesterId;
       if (vendedorId === compradorId) return res.status(400).json({ error: 'No podés contactarte a vos mismo' });
 
-      const conversacion = await prisma.conversacion.upsert({
-        where: {
-          compradorId_vendedorId: { compradorId, vendedorId },
-        },
-        create: {
-          compradorId,
-          vendedorId,
-          marketItemId: marketItemIdFinal,
-        },
-        update: {
-          ...(marketItemIdFinal && { marketItemId: marketItemIdFinal }),
-          updatedAt: new Date(),
-        },
-      });
+      // Caso 2: conversación por marketItem (pre-compra) o por vendedor (genérica)
+      const whereConv: any = marketItemIdFinal
+        ? { compradorId, vendedorId, marketItemId: marketItemIdFinal, intercambioId: null }
+        : { compradorId, vendedorId, marketItemId: null, intercambioId: null };
 
-      res.status(200).json({ conversacionId: conversacion.id });
+      let conversacion = await prisma.conversacion.findFirst({ where: whereConv, select: { id: true } });
+      if (!conversacion) {
+        try {
+          conversacion = await prisma.conversacion.create({
+            data: {
+              compradorId,
+              vendedorId,
+              marketItemId: marketItemIdFinal,
+            },
+            select: { id: true },
+          });
+        } catch {
+          conversacion = await prisma.conversacion.findFirst({ where: whereConv, select: { id: true } });
+        }
+      } else {
+        await prisma.conversacion.update({ where: { id: conversacion.id }, data: { updatedAt: new Date() } }).catch(() => {});
+      }
+
+      res.status(200).json({ conversacionId: conversacion!.id });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

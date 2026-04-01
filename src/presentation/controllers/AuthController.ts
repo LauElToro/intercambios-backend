@@ -99,7 +99,7 @@ export class AuthController {
 
   static async register(req: Request, res: Response) {
     try {
-      const { nombre, email, password, contacto, ubicacion } = req.body;
+      const { nombre, email, password, contacto, ubicacion, codigoReferido } = req.body;
       
       if (!nombre || !email || !password || !contacto) {
         return res.status(400).json({ error: 'Faltan campos requeridos: nombre, email, password, contacto' });
@@ -112,6 +112,7 @@ export class AuthController {
         password,
         contacto,
         ubicacion,
+        codigoReferido: typeof codigoReferido === 'string' ? codigoReferido : undefined,
       });
 
       // No devolver password

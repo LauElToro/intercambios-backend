@@ -84,18 +84,24 @@ export class CheckoutUseCase {
         },
       });
 
-      const conversacion = await tx.conversacion.upsert({
-        where: {
-          compradorId_vendedorId: { compradorId: data.compradorId, vendedorId: item.vendedorId },
-        },
-        create: {
-          compradorId: data.compradorId,
-          vendedorId: item.vendedorId,
-          marketItemId: data.marketItemId,
-          intercambioId: intercambio.id,
-        },
-        update: { marketItemId: data.marketItemId, intercambioId: intercambio.id, updatedAt: new Date() },
+      // Una conversación por compra/intercambio (no reutilizar hilos previos).
+      let conversacion = await tx.conversacion.findFirst({
+        where: { intercambioId: intercambio.id },
       });
+      if (!conversacion) {
+        try {
+          conversacion = await tx.conversacion.create({
+            data: {
+              compradorId: data.compradorId,
+              vendedorId: item.vendedorId,
+              marketItemId: data.marketItemId,
+              intercambioId: intercambio.id,
+            },
+          });
+        } catch {
+          conversacion = await tx.conversacion.findFirst({ where: { intercambioId: intercambio.id } });
+        }
+      }
 
       // Marcar producto como vendido para que no siga apareciendo en el market
       await tx.marketItem.update({
@@ -117,7 +123,7 @@ export class CheckoutUseCase {
           createdAt: intercambio.createdAt,
           updatedAt: intercambio.updatedAt,
         }),
-        conversacionId: conversacion.id,
+        conversacionId: conversacion!.id,
       };
     });
 
