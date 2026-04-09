@@ -1,0 +1,347 @@
+// =============================================================================
+// INTERCAMBIUS - Schema de base de datos para marketplace
+// Diseñado para: catálogo, SEO, Meta/Google Ads y exportación de feeds
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Si usás connection pooling (Prisma Accelerate, Neon, etc.) y las migraciones hacen timeout,
+  // descomentá la línea siguiente y configurá DIRECT_DATABASE_URL en Vercel con la URL directa a Postgres.
+  // directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// USUARIOS
+// -----------------------------------------------------------------------------
+
+model User {
+  id            Int       @id @default(autoincrement())
+  nombre        String
+  email         String    @unique
+  password      String
+  contacto      String
+  saldo         Int       @default(0)  // Positivo: infinito. Negativo: hasta -limite
+  limite        Int       @default(50000)  // Límite de saldo negativo (crédito en rojo)
+  rating        Float?
+  totalResenas  Int       @default(0)
+  miembroDesde  DateTime  @default(now())
+  ubicacion     String
+  verificado    Boolean   @default(false)
+  bio           String?   @db.Text
+  fotoPerfil    String?   // URL foto de perfil
+  banner        String?   // URL banner
+  redesSociales Json?     // { instagram, facebook, twitter, linkedin, web }
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  // MFA por email (código 6 dígitos)
+  mfaCode             String?   // Código temporal (hasheado)
+  mfaCodeExpiresAt    DateTime?
+  // Recuperación de contraseña
+  passwordResetToken   String?   @unique
+  passwordResetExpiresAt DateTime?
+  bannedAt             DateTime?   // Si está setado, el usuario está baneado
+
+  terminosAceptadosAt  DateTime? // aceptación de términos en registro
+  deudaEnLimiteDesde   DateTime? // deuda al límite negativo desde (regularización)
+
+  // Referidos
+  referralCode     String   @unique @default(cuid())
+  referralSlug     String?  @unique
+  referredById     Int?
+  referralCodeUsed String?
+  referredBy       User?    @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredUsers    User[]   @relation("UserReferrals")
+
+  perfilMercado UserPerfilMercado?
+  marketItems   MarketItem[]
+  favoritos     Favorito[]
+  intercambios  Intercambio[]           @relation("UsuarioIntercambios")
+  intercambiosComoOtraPersona Intercambio[] @relation("OtraPersonaIntercambios")
+  conversacionesComprador   Conversacion[] @relation("ConversacionesComoComprador")
+  conversacionesVendedor    Conversacion[] @relation("ConversacionesComoVendedor")
+  mensajesEnviados          Mensaje[]      @relation("MensajesUsuario")
+  busquedas                 Busqueda[]
+  notificaciones            Notificacion[]
+
+  @@index([email])
+  @@index([ubicacion])
+  @@index([referralCode])
+  @@index([referralSlug])
+  @@index([referredById])
+}
+
+// Perfil de mercado por usuario: qué ofrece, qué necesita, crédito/precio oferta custom.
+// Se gestiona aparte (por productos o por configuración del usuario).
+model UserPerfilMercado {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  ofrece       String?  @db.Text // Lo que ofrece (resumen o custom)
+  necesita     String?  @db.Text // Lo que necesita (resumen o custom)
+  precioOferta Int?     // Crédito o precio oferta custom por usuario
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// -----------------------------------------------------------------------------
+// CATEGORÍAS (jerárquicas, para feeds y navegación)
+// google_product_category: ID de categoría de Google Merchant Center
+// -----------------------------------------------------------------------------
+
+model Category {
+  id                    Int       @id @default(autoincrement())
+  parentId              Int?
+  name                  String
+  slug                  String    @unique
+  rubro                 String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
+  sortOrder             Int       @default(0)
+  metaTitle             String?
+  metaDescription       String?   @db.Text
+  googleProductCategoryId String? // Ej: "123" para Google Merchant
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  parent                Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children              Category[] @relation("CategoryHierarchy")
+  marketItems           MarketItem[]
+
+  @@index([parentId])
+  @@index([slug])
+  @@index([rubro])
+}
+
+// -----------------------------------------------------------------------------
+// PRODUCTOS / LISTADOS (MarketItem)
+// Campos alineados con Meta Catalog y Google Merchant Center para feeds
+// -----------------------------------------------------------------------------
+
+model MarketItem {
+  id                Int       @id @default(autoincrement())
+  slug              String?   @unique // URL amigable: /producto/mi-producto-123
+  titulo            String
+  descripcion       String    @db.Text
+  descripcionCompleta String? @db.Text
+  precio            Int       // Precio en IX (moneda interna)
+  tipoPago          String?   @default("ix") // ix | convenir | pesos | ix_pesos
+  rubro             String    // 'servicios' | 'productos' | 'alimentos' | 'experiencias'
+  ubicacion         String
+  lat               Float?
+  lng               Float?
+  distancia         Float?
+  imagen            String    // Imagen principal (compatibilidad)
+  vendedorId        Int
+  rating            Float     @default(0)
+  // Estado y visibilidad
+  status            String    @default("active") // draft | active | paused | sold
+  condition         String?   // new | refurbished | used (requerido en feeds)
+  availability      String    @default("in_stock") // in_stock | out_of_stock
+  stock             Int?      // null = servicios (sin stock); entero = unidades
+  // Para feeds Meta / Google
+  brand             String?
+  gtin              String?   // Global Trade Item Number (Google)
+  mpn               String?   // Manufacturer Part Number (Google)
+  // Metadata SEO y redes
+  metaTitle         String?
+  metaDescription   String?   @db.Text
+  ogImage           String?   // URL imagen Open Graph
+  schemaOrg         Json?     // Schema.org Product (JSON-LD)
+  // Custom labels para segmentación en ads (0-4)
+  customLabel0      String?
+  customLabel1      String?
+  customLabel2      String?
+  customLabel3      String?
+  customLabel4      String?
+  categoryId        Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  vendedor          User      @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  category          Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  detalles          MarketItemDetalle[]
+  caracteristicas   MarketItemCaracteristica[]
+  images            ProductImage[]
+  favoritos         Favorito[]
+  intercambios      Intercambio[]
+  conversaciones    Conversacion[]
+
+  @@index([vendedorId])
+  @@index([rubro])
+  @@index([precio])
+  @@index([ubicacion])
+  @@index([status])
+  @@index([categoryId])
+  @@index([slug])
+}
+
+// Medios del producto: imágenes o video (máx 6 imágenes o 5 imágenes + 1 video)
+model ProductImage {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  url         String
+  alt         String?
+  position    Int       @default(0)
+  isPrimary   Boolean   @default(false)
+  mediaType   String    @default("image") // 'image' | 'video'
+  createdAt   DateTime  @default(now())
+
+  marketItem  MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@index([marketItemId])
+}
+
+// Favoritos por usuario
+model Favorito {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  marketItemId Int
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketItem  MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, marketItemId])
+  @@index([userId])
+  @@index([marketItemId])
+}
+
+model MarketItemDetalle {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  clave       String
+  valor       String
+  createdAt   DateTime  @default(now())
+
+  marketItem MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@unique([marketItemId, clave])
+  @@index([marketItemId])
+}
+
+model MarketItemCaracteristica {
+  id          Int       @id @default(autoincrement())
+  marketItemId Int
+  texto       String
+  createdAt   DateTime  @default(now())
+
+  marketItem MarketItem @relation(fields: [marketItemId], references: [id], onDelete: Cascade)
+
+  @@index([marketItemId])
+}
+
+// -----------------------------------------------------------------------------
+// INTERCAMBIOS / TRANSACCIONES
+// externalId: para exportación a sistemas externos y reconciliación
+// -----------------------------------------------------------------------------
+
+model Intercambio {
+  id              Int       @id @default(autoincrement())
+  externalId      String?   @unique
+  usuarioId       Int       // Comprador/pagador
+  otraPersonaId   Int       // Vendedor/receptor
+  otraPersonaNombre String
+  marketItemId    Int?      // Producto comprado (checkout automático)
+  descripcion     String    @db.Text
+  creditos        Int       // Negativo = usuarioId pagó, positivo = usuarioId recibió
+  fecha           DateTime
+  estado          String    @default("pendiente")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
+  otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
+  marketItem      MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId])
+  @@index([otraPersonaId])
+  @@index([estado])
+  @@index([fecha])
+  @@index([externalId])
+  @@index([marketItemId])
+}
+
+// -----------------------------------------------------------------------------
+// CHAT - Conversaciones entre comprador y vendedor (post-checkout)
+// -----------------------------------------------------------------------------
+
+model Conversacion {
+  id            Int       @id @default(autoincrement())
+  compradorId   Int
+  vendedorId    Int
+  marketItemId  Int?
+  intercambioId Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  comprador     User      @relation("ConversacionesComoComprador", fields: [compradorId], references: [id], onDelete: Cascade)
+  vendedor      User      @relation("ConversacionesComoVendedor", fields: [vendedorId], references: [id], onDelete: Cascade)
+  marketItem    MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
+  mensajes      Mensaje[]
+
+  @@index([compradorId])
+  @@index([vendedorId])
+  @@index([marketItemId])
+  @@index([intercambioId])
+}
+
+model Mensaje {
+  id              Int       @id @default(autoincrement())
+  conversacionId  Int
+  senderId        Int
+  contenido       String    @db.Text
+  leido           Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  conversacion    Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  sender          User         @relation("MensajesUsuario", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId])
+  @@index([senderId])
+}
+
+// -----------------------------------------------------------------------------
+// BÚSQUEDAS - Historial para personalización y métricas admin
+// Solo se registran si el usuario acepta cookies de preferencias
+// -----------------------------------------------------------------------------
+
+model Busqueda {
+  id        Int      @id @default(autoincrement())
+  userId    Int      // Usuario logueado que realizó la búsqueda
+  termino   String   @db.Text  // Texto buscado (vacío si solo filtros)
+  seccion   String   // 'market' | 'coincidencias'
+  filtros   Json?    // { rubro, tipo, precioMin, precioMax, ... }
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([seccion])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// NOTIFICACIONES - Alertas por mensaje, compra, venta, búsquedas, etc.
+// -----------------------------------------------------------------------------
+
+model Notificacion {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  tipo       String   // 'mensaje' | 'compra' | 'venta' | 'apareciste_busquedas' | 'producto_mas_buscado' | 'nuevo_favorito'
+  titulo     String   @db.Text
+  mensaje    String?  @db.Text
+  leido      Boolean  @default(false)
+  metadata   Json?    // { conversacionId, intercambioId, marketItemId, etc }
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([leido])
+  @@index([createdAt])
+}

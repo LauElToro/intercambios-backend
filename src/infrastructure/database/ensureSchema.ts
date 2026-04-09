@@ -1,0 +1,546 @@
+/**
+ * Sincroniza el schema de la base de datos en tiempo de ejecución.
+ * Añade columnas faltantes a User y crea tablas (MarketItem, etc.) si no existen.
+ * Idempotente: seguro ejecutar en cada cold start.
+ */
+
+import prisma from './prisma.js';
+
+let syncPromise: Promise<void> | null = null;
+
+export function ensureSchema(): Promise<void> {
+  if (syncPromise) return syncPromise;
+  const p = runSchemaSync();
+  p.catch(() => {
+    syncPromise = null;
+  });
+  syncPromise = p;
+  return syncPromise;
+}
+
+async function runSchemaSync(): Promise<void> {
+  try {
+    // User: añadir columnas usando el nombre real de la tabla (User o user)
+    let userSyncOk = false;
+    try {
+      await prisma.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        tname text;
+      BEGIN
+        SELECT tablename INTO tname FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('User', 'user') LIMIT 1;
+        IF tname IS NOT NULL THEN
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'nombre');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'contacto');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 0', tname, 'saldo');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 50000', tname, 'limite');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I DOUBLE PRECISION', tname, 'rating');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER DEFAULT 0', tname, 'totalResenas');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'miembroDesde');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'ubicacion');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'verificado');
+          -- Referidos
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER', tname, 'referredById');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCodeUsed');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'createdAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'updatedAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'terminosAceptadosAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'deudaEnLimiteDesde');
+        END IF;
+      END $$;
+    `);
+      userSyncOk = true;
+    } catch (e) {
+      console.error('[ensureSchema] DO block User columns failed:', (e as Error)?.message);
+      // Fallback: ALTER directo por si el DO falla (permisos, etc.)
+      for (const [name, def] of [
+        ['nombre', 'TEXT'],
+        ['contacto', 'TEXT'],
+        ['saldo', 'INTEGER DEFAULT 0'],
+      ] as const) {
+        try {
+          await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "${name}" ${def};`);
+          userSyncOk = true;
+        } catch {
+          try {
+            await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "${name}" ${def};`);
+            userSyncOk = true;
+          } catch (e2) {
+            console.error('[ensureSchema] ADD COLUMN', name, (e2 as Error)?.message);
+          }
+        }
+      }
+    }
+
+    // Rellenar NULLs en User (probar ambos nombres de tabla)
+    try {
+      await prisma.$executeRawUnsafe(`UPDATE "User" SET "ubicacion" = 'CABA' WHERE "ubicacion" IS NULL;`);
+    } catch {
+      try {
+        await prisma.$executeRawUnsafe(`UPDATE "user" SET "ubicacion" = 'CABA' WHERE "ubicacion" IS NULL;`);
+      } catch {
+        // ignorar
+      }
+    }
+
+    // Backfill referralCode y crear índices únicos (si faltan)
+    // Usamos un valor determinístico por id para evitar colisiones.
+    for (const t of ['"User"', '"user"'] as const) {
+      try {
+        await prisma.$executeRawUnsafe(`UPDATE ${t} SET "referralCode" = ('ref-' || "id"::text) WHERE "referralCode" IS NULL OR "referralCode" = '';`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralCode_key" ON ${t}("referralCode");`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralSlug_key" ON ${t}("referralSlug") WHERE "referralSlug" IS NOT NULL;`);
+        await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_referredById_idx" ON ${t}("referredById");`);
+      } catch {
+        // ignorar (tabla no existe o permisos)
+      }
+    }
+
+    // MarketItem y tablas relacionadas si no existen
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "MarketItem" (
+          "id" SERIAL NOT NULL,
+          "titulo" TEXT NOT NULL,
+          "descripcion" TEXT NOT NULL,
+          "descripcionCompleta" TEXT,
+          "precio" INTEGER NOT NULL,
+          "rubro" TEXT NOT NULL,
+          "ubicacion" TEXT NOT NULL,
+          "distancia" DOUBLE PRECISION,
+          "imagen" TEXT NOT NULL,
+          "vendedorId" INTEGER NOT NULL,
+          "rating" DOUBLE PRECISION NOT NULL DEFAULT 0,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "MarketItem_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItem_vendedorId_idx" ON "MarketItem"("vendedorId");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItem_rubro_idx" ON "MarketItem"("rubro");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItem_precio_idx" ON "MarketItem"("precio");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItem_ubicacion_idx" ON "MarketItem"("ubicacion");`
+      );
+    } catch {
+      // ya existen
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "MarketItemDetalle" (
+          "id" SERIAL NOT NULL,
+          "marketItemId" INTEGER NOT NULL,
+          "clave" TEXT NOT NULL,
+          "valor" TEXT NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "MarketItemDetalle_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "MarketItemDetalle_marketItemId_clave_key" ON "MarketItemDetalle"("marketItemId", "clave");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItemDetalle_marketItemId_idx" ON "MarketItemDetalle"("marketItemId");`
+      );
+    } catch {
+      // ya existen
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "MarketItemCaracteristica" (
+          "id" SERIAL NOT NULL,
+          "marketItemId" INTEGER NOT NULL,
+          "texto" TEXT NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "MarketItemCaracteristica_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "MarketItemCaracteristica_marketItemId_idx" ON "MarketItemCaracteristica"("marketItemId");`
+      );
+    } catch {
+      // ya existen
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Intercambio" (
+          "id" SERIAL NOT NULL,
+          "usuarioId" INTEGER NOT NULL,
+          "otraPersonaId" INTEGER NOT NULL,
+          "otraPersonaNombre" TEXT NOT NULL,
+          "descripcion" TEXT NOT NULL,
+          "creditos" INTEGER NOT NULL,
+          "fecha" TIMESTAMP(3) NOT NULL,
+          "estado" TEXT NOT NULL DEFAULT 'pendiente',
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Intercambio_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "Intercambio_usuarioId_idx" ON "Intercambio"("usuarioId");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "Intercambio_otraPersonaId_idx" ON "Intercambio"("otraPersonaId");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "Intercambio_estado_idx" ON "Intercambio"("estado");`
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "Intercambio_fecha_idx" ON "Intercambio"("fecha");`
+      );
+    } catch {
+      // ya existen
+    }
+
+    // Category (marketplace)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Category" (
+          "id" SERIAL NOT NULL,
+          "parentId" INTEGER,
+          "name" TEXT NOT NULL,
+          "slug" TEXT NOT NULL,
+          "rubro" TEXT NOT NULL,
+          "sortOrder" INTEGER NOT NULL DEFAULT 0,
+          "metaTitle" TEXT,
+          "metaDescription" TEXT,
+          "googleProductCategoryId" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Category_slug_key" ON "Category"("slug");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Category_parentId_idx" ON "Category"("parentId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Category_rubro_idx" ON "Category"("rubro");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Category_parentId_fkey') THEN
+            ALTER TABLE "Category" ADD CONSTRAINT "Category_parentId_fkey"
+            FOREIGN KEY ("parentId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // ProductImage (marketplace)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "ProductImage" (
+          "id" SERIAL NOT NULL,
+          "marketItemId" INTEGER NOT NULL,
+          "url" TEXT NOT NULL,
+          "alt" TEXT,
+          "position" INTEGER NOT NULL DEFAULT 0,
+          "isPrimary" BOOLEAN NOT NULL DEFAULT false,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ProductImage_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ProductImage_marketItemId_idx" ON "ProductImage"("marketItemId");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ProductImage_marketItemId_fkey') THEN
+            ALTER TABLE "ProductImage" ADD CONSTRAINT "ProductImage_marketItemId_fkey"
+            FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "ProductImage" ADD COLUMN IF NOT EXISTS "mediaType" TEXT DEFAULT 'image';`);
+    } catch {
+      // ignorar
+    }
+
+    // Favorito
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Favorito" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "marketItemId" INTEGER NOT NULL,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Favorito_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Favorito_userId_marketItemId_key" ON "Favorito"("userId", "marketItemId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Favorito_userId_idx" ON "Favorito"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Favorito_marketItemId_idx" ON "Favorito"("marketItemId");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Favorito_userId_fkey') THEN
+            ALTER TABLE "Favorito" ADD CONSTRAINT "Favorito_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Favorito_marketItemId_fkey') THEN
+            ALTER TABLE "Favorito" ADD CONSTRAINT "Favorito_marketItemId_fkey" FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // MarketItem: columnas nuevas para feeds/metadata (ADD COLUMN IF NOT EXISTS)
+    const marketItemCols = [
+      ['tipoPago', 'TEXT DEFAULT \'ix\''],
+      ['slug', 'TEXT'],
+      ['status', 'TEXT DEFAULT \'active\''],
+      ['condition', 'TEXT'],
+      ['availability', 'TEXT DEFAULT \'in_stock\''],
+      ['brand', 'TEXT'],
+      ['gtin', 'TEXT'],
+      ['mpn', 'TEXT'],
+      ['metaTitle', 'TEXT'],
+      ['metaDescription', 'TEXT'],
+      ['ogImage', 'TEXT'],
+      ['schemaOrg', 'JSONB'],
+      ['customLabel0', 'TEXT'],
+      ['customLabel1', 'TEXT'],
+      ['customLabel2', 'TEXT'],
+      ['customLabel3', 'TEXT'],
+      ['customLabel4', 'TEXT'],
+      ['categoryId', 'INTEGER'],
+      ['stock', 'INTEGER'],
+    ] as const;
+    for (const [name, def] of marketItemCols) {
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "MarketItem" ADD COLUMN IF NOT EXISTS "${name}" ${def};`);
+      } catch {
+        // ignorar
+      }
+    }
+    try {
+      await prisma.$executeRawUnsafe(`UPDATE "MarketItem" SET "stock" = NULL WHERE "rubro" = 'servicios';`);
+      await prisma.$executeRawUnsafe(
+        `UPDATE "MarketItem" SET "stock" = 0 WHERE "rubro" <> 'servicios' AND "status" IN ('sold', 'paused') AND "stock" IS NULL;`
+      );
+      await prisma.$executeRawUnsafe(
+        `UPDATE "MarketItem" SET "stock" = 1 WHERE "rubro" <> 'servicios' AND "status" = 'active' AND "stock" IS NULL;`
+      );
+    } catch {
+      // ignorar
+    }
+
+    // User: bio, fotoPerfil, banner, redesSociales
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fotoPerfil" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "banner" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "redesSociales" JSONB;`);
+    } catch {
+      // ignorar
+    }
+
+    // UserPerfilMercado (ofrece, necesita, precioOferta por usuario)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "UserPerfilMercado" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "ofrece" TEXT,
+          "necesita" TEXT,
+          "precioOferta" INTEGER,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "UserPerfilMercado_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "UserPerfilMercado_userId_key" ON "UserPerfilMercado"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UserPerfilMercado_userId_idx" ON "UserPerfilMercado"("userId");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'UserPerfilMercado_userId_fkey') THEN
+            ALTER TABLE "UserPerfilMercado" ADD CONSTRAINT "UserPerfilMercado_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // Intercambio: externalId, marketItemId
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "externalId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "marketItemId" INTEGER;`);
+    } catch {
+      // ignorar
+    }
+
+    // Conversacion y Mensaje (chat)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Conversacion" (
+          "id" SERIAL NOT NULL,
+          "compradorId" INTEGER NOT NULL,
+          "vendedorId" INTEGER NOT NULL,
+          "marketItemId" INTEGER,
+          "intercambioId" INTEGER,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Conversacion_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      // Antes: unique por (compradorId, vendedorId) mezclaba chats de compras distintas.
+      // Ahora: único por intercambioId (cuando no es NULL) y único por (compradorId,vendedorId,marketItemId) para contacto pre-compra.
+      try {
+        await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "Conversacion_compradorId_vendedorId_key";`);
+      } catch {
+        // ignorar
+      }
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Conversacion_intercambioId_key"
+        ON "Conversacion"("intercambioId")
+        WHERE "intercambioId" IS NOT NULL;
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "Conversacion_comprador_vendedor_marketItemId_key"
+        ON "Conversacion"("compradorId","vendedorId","marketItemId")
+        WHERE "marketItemId" IS NOT NULL AND "intercambioId" IS NULL;
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Conversacion_compradorId_idx" ON "Conversacion"("compradorId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Conversacion_vendedorId_idx" ON "Conversacion"("vendedorId");`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Mensaje" (
+          "id" SERIAL NOT NULL,
+          "conversacionId" INTEGER NOT NULL,
+          "senderId" INTEGER NOT NULL,
+          "contenido" TEXT NOT NULL,
+          "leido" BOOLEAN NOT NULL DEFAULT false,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Mensaje_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Conversacion_compradorId_fkey') THEN
+            ALTER TABLE "Conversacion" ADD CONSTRAINT "Conversacion_compradorId_fkey" FOREIGN KEY ("compradorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Conversacion_vendedorId_fkey') THEN
+            ALTER TABLE "Conversacion" ADD CONSTRAINT "Conversacion_vendedorId_fkey" FOREIGN KEY ("vendedorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Conversacion_marketItemId_fkey') THEN
+            ALTER TABLE "Conversacion" ADD CONSTRAINT "Conversacion_marketItemId_fkey" FOREIGN KEY ("marketItemId") REFERENCES "MarketItem"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Mensaje_conversacionId_fkey') THEN
+            ALTER TABLE "Mensaje" ADD CONSTRAINT "Mensaje_conversacionId_fkey" FOREIGN KEY ("conversacionId") REFERENCES "Conversacion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Mensaje_senderId_fkey') THEN
+            ALTER TABLE "Mensaje" ADD CONSTRAINT "Mensaje_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // FKs si no existen
+    const fks = [
+      ['MarketItem', 'MarketItem_vendedorId_fkey', '"vendedorId"', 'User', 'CASCADE'],
+      ['MarketItem', 'MarketItem_categoryId_fkey', '"categoryId"', 'Category', 'SET NULL'],
+      ['MarketItemDetalle', 'MarketItemDetalle_marketItemId_fkey', '"marketItemId"', 'MarketItem', 'CASCADE'],
+      ['MarketItemCaracteristica', 'MarketItemCaracteristica_marketItemId_fkey', '"marketItemId"', 'MarketItem', 'CASCADE'],
+      ['Intercambio', 'Intercambio_usuarioId_fkey', '"usuarioId"', 'User', 'RESTRICT'],
+      ['Intercambio', 'Intercambio_otraPersonaId_fkey', '"otraPersonaId"', 'User', 'RESTRICT'],
+    ] as const;
+    for (const [table, conname, col, refTable, onDelete] of fks) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${conname}') THEN
+              ALTER TABLE "${table}" ADD CONSTRAINT "${conname}" FOREIGN KEY (${col}) REFERENCES "${refTable}"("id") ON DELETE ${onDelete} ON UPDATE CASCADE;
+            END IF;
+          END $$;
+        `);
+      } catch {
+        // ignorar
+      }
+    }
+
+    // Busqueda (historial de búsquedas para personalización y métricas)
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Busqueda" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "termino" TEXT NOT NULL,
+          "seccion" TEXT NOT NULL,
+          "filtros" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Busqueda_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_userId_idx" ON "Busqueda"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_seccion_idx" ON "Busqueda"("seccion");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Busqueda_createdAt_idx" ON "Busqueda"("createdAt");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Busqueda_userId_fkey') THEN
+            ALTER TABLE "Busqueda" ADD CONSTRAINT "Busqueda_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // Notificacion
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Notificacion" (
+          "id" SERIAL NOT NULL,
+          "userId" INTEGER NOT NULL,
+          "tipo" TEXT NOT NULL,
+          "titulo" TEXT NOT NULL,
+          "mensaje" TEXT,
+          "leido" BOOLEAN NOT NULL DEFAULT false,
+          "metadata" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "Notificacion_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_userId_idx" ON "Notificacion"("userId");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_leido_idx" ON "Notificacion"("leido");`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Notificacion_createdAt_idx" ON "Notificacion"("createdAt");`);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Notificacion_userId_fkey') THEN
+            ALTER TABLE "Notificacion" ADD CONSTRAINT "Notificacion_userId_fkey"
+            FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+  } catch (err) {
+    console.error('[ensureSchema]', err);
+    // No relanzar: la app puede seguir y quizá la DB ya está bien
+  }
+}

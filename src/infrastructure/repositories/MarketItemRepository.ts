@@ -1,0 +1,446 @@
+import { MarketItem } from '../../domain/entities/MarketItem.js';
+import { IMarketItemRepository, MarketItemFilters, PaginatedResult } from '../../domain/repositories/IMarketItemRepository.js';
+import prisma from '../database/prisma.js';
+
+/** Distancia en km entre dos puntos (fórmula de Haversine) */
+function haversineDistanceKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number
+): number {
+  const R = 6371; // Radio de la Tierra en km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+type PrismaItem = {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  precio: number;
+  tipoPago?: string | null;
+  rubro: string;
+  vendedorId: number;
+  descripcionCompleta: string | null;
+  ubicacion: string;
+  lat?: number | null;
+  lng?: number | null;
+  distancia?: number | null;
+  imagen: string;
+  rating: number;
+  detalles: { clave: string; valor: string }[];
+  caracteristicas: { texto: string }[];
+  createdAt: Date;
+  updatedAt: Date;
+  slug?: string | null;
+  status?: string | null;
+  condition?: string | null;
+  availability?: string | null;
+  brand?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  ogImage?: string | null;
+  categoryId?: number | null;
+  images?: { url: string; alt: string | null; position: number; isPrimary: boolean; mediaType?: string }[];
+  stock?: number | null;
+};
+
+function mapToEntity(itemData: PrismaItem): MarketItem {
+  const detalles: Record<string, string> = {};
+  itemData.detalles.forEach((d) => { detalles[d.clave] = d.valor; });
+  const caracteristicas = itemData.caracteristicas.map((c) => c.texto);
+  const images = itemData.images?.map((img) => ({
+    url: img.url,
+    alt: img.alt ?? undefined,
+    position: img.position,
+    isPrimary: img.isPrimary,
+    mediaType: (img as any).mediaType ?? 'image',
+  }));
+  return MarketItem.create({
+    id: itemData.id,
+    titulo: itemData.titulo,
+    descripcion: itemData.descripcion,
+    precio: itemData.precio,
+    rubro: itemData.rubro as 'servicios' | 'productos' | 'alimentos' | 'experiencias',
+    vendedorId: itemData.vendedorId,
+    descripcionCompleta: itemData.descripcionCompleta ?? undefined,
+    ubicacion: itemData.ubicacion,
+    lat: itemData.lat ?? undefined,
+    lng: itemData.lng ?? undefined,
+    distancia: itemData.distancia ?? undefined,
+    tipoPago: itemData.tipoPago ?? undefined,
+    imagen: itemData.imagen,
+    rating: itemData.rating,
+    detalles,
+    caracteristicas,
+    createdAt: itemData.createdAt,
+    updatedAt: itemData.updatedAt,
+    slug: itemData.slug ?? undefined,
+    status: itemData.status ?? undefined,
+    condition: itemData.condition ?? undefined,
+    availability: itemData.availability ?? undefined,
+    brand: itemData.brand ?? undefined,
+    metaTitle: itemData.metaTitle ?? undefined,
+    metaDescription: itemData.metaDescription ?? undefined,
+    ogImage: itemData.ogImage ?? undefined,
+    categoryId: itemData.categoryId ?? undefined,
+    images,
+    stock: itemData.stock !== undefined ? itemData.stock : null,
+  });
+}
+
+function resolveStockForWrite(rubro: string, stock: unknown): number | null {
+  if (rubro === 'servicios') return null;
+  const n = typeof stock === 'number' ? stock : parseInt(String(stock ?? ''), 10);
+  if (!Number.isFinite(n) || n < 0) return 1;
+  return Math.floor(n);
+}
+
+export class MarketItemRepository implements IMarketItemRepository {
+  async findById(id: number): Promise<MarketItem | null> {
+    const itemData = await prisma.marketItem.findUnique({
+      where: { id },
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+    });
+
+    if (!itemData) return null;
+    return mapToEntity(itemData as PrismaItem);
+  }
+
+  async findAll(filters?: MarketItemFilters): Promise<PaginatedResult<MarketItem>> {
+    const page = Math.max(1, filters?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, filters?.limit ?? 24));
+    const where: any = { status: 'active' };
+
+    if (filters?.rubro && filters.rubro !== 'todos') {
+      where.rubro = filters.rubro;
+    }
+
+    if (filters?.tipo) {
+      const esProducto = filters.tipo === 'productos';
+      where.rubro = esProducto 
+        ? { in: ['productos', 'alimentos'] }
+        : { in: ['servicios', 'experiencias'] };
+    }
+
+    if (filters?.precioMin !== undefined) {
+      where.precio = { ...where.precio, gte: filters.precioMin };
+    }
+
+    if (filters?.precioMax !== undefined) {
+      where.precio = { ...where.precio, lte: filters.precioMax };
+    }
+
+    if (filters?.vendedorId) {
+      where.vendedorId = filters.vendedorId;
+    }
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    // Búsqueda con match ~70%: al menos 70% de las palabras deben aparecer en título o descripción
+    const searchWords = filters?.search?.trim()
+      ? filters.search.trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
+      : [];
+    const hasSearch = searchWords.length > 0;
+
+    const andParts: Record<string, unknown>[] = [];
+    if (hasSearch) {
+      for (const w of searchWords) {
+        andParts.push({
+          OR: [
+            { titulo: { contains: w, mode: 'insensitive' as const } },
+            { descripcion: { contains: w, mode: 'insensitive' as const } },
+          ],
+        });
+      }
+    }
+    if (filters?.soloDisponibles && !filters?.vendedorId) {
+      andParts.push({
+        OR: [{ rubro: 'servicios' }, { stock: { gt: 0 } }],
+      });
+    }
+    if (andParts.length > 0) {
+      where.AND = andParts;
+    }
+
+    const userLat = filters?.userLat;
+    const userLng = filters?.userLng;
+    const maxKm = filters?.distanciaMax;
+    const canFilterByDistance = typeof userLat === 'number' && !isNaN(userLat) &&
+      typeof userLng === 'number' && !isNaN(userLng) &&
+      typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
+
+    const findManyOptions: { skip?: number; take: number } =
+      canFilterByDistance || hasSearch
+        ? { take: 2000 }
+        : { skip: (page - 1) * limit, take: limit };
+
+    const itemsData = await prisma.marketItem.findMany({
+      where,
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+      ...findManyOptions,
+    });
+
+    let items = itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
+
+    // Filtrar por match ~70% cuando hay búsqueda
+    if (hasSearch) {
+      const umbral = 0.7;
+      items = items.filter((item) => {
+        const texto = `${(item.titulo || '')} ${(item.descripcion || '')}`.toLowerCase();
+        const matches = searchWords.filter((w) => texto.includes(w)).length;
+        return matches / searchWords.length >= umbral;
+      });
+    }
+
+    if (canFilterByDistance) {
+      items = items.filter((item) => {
+        if (item.lat == null || item.lng == null) return false;
+        const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+        return dist <= maxKm!;
+      });
+    }
+
+    // Paginar cuando se filtró en memoria (distancia o búsqueda)
+    if (canFilterByDistance || hasSearch) {
+      const total = items.length;
+      const start = (page - 1) * limit;
+      items = items.slice(start, start + limit);
+      if (canFilterByDistance) {
+        items = items.map((item) => {
+          if (item.lat != null && item.lng != null) {
+            const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+            return MarketItem.create({
+            id: item.id,
+            titulo: item.titulo,
+            descripcion: item.descripcion,
+            precio: item.precio,
+            rubro: item.rubro,
+            vendedorId: item.vendedorId,
+            descripcionCompleta: item.descripcionCompleta,
+            ubicacion: item.ubicacion,
+            lat: item.lat,
+            lng: item.lng,
+            distancia: Math.round(dist * 10) / 10,
+            tipoPago: item.tipoPago,
+            imagen: item.imagen,
+            rating: item.rating,
+            detalles: item.detalles,
+            caracteristicas: item.caracteristicas,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+            slug: item.slug,
+            status: item.status,
+            condition: item.condition,
+            availability: item.availability,
+            brand: item.brand,
+            metaTitle: item.metaTitle,
+            metaDescription: item.metaDescription,
+            ogImage: item.ogImage,
+            categoryId: item.categoryId,
+            images: item.images,
+            stock: item.stock,
+          });
+        }
+        return item;
+        });
+      }
+      return {
+        data: items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      };
+    }
+
+    const total = await prisma.marketItem.count({ where });
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  async findByPrecioAproximado(precioReferencia: number, margenPorcentaje: number): Promise<MarketItem[]> {
+    const margen = precioReferencia * margenPorcentaje;
+    const precioMin = precioReferencia - margen;
+    const precioMax = precioReferencia + margen;
+
+    const itemsData = await prisma.marketItem.findMany({
+      where: {
+        status: 'active',
+        precio: { gte: precioMin, lte: precioMax },
+        OR: [{ rubro: 'servicios' }, { stock: { gt: 0 } }],
+      },
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+    });
+
+    return itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
+  }
+
+  async save(item: MarketItem): Promise<MarketItem> {
+    const data: Record<string, unknown> = {
+      titulo: item.titulo,
+      descripcion: item.descripcion,
+      descripcionCompleta: item.descripcionCompleta,
+      precio: item.precio,
+      tipoPago: item.tipoPago ?? 'ix',
+      rubro: item.rubro,
+      ubicacion: item.ubicacion || 'CABA',
+      lat: item.lat,
+      lng: item.lng,
+      distancia: item.distancia,
+      imagen: item.imagen || '',
+      vendedorId: item.vendedorId,
+      rating: item.rating || 0,
+      stock: resolveStockForWrite(item.rubro, (item as any).stock),
+      detalles: {
+        create: Object.entries(item.detalles || {}).map(([clave, valor]) => ({ clave, valor })),
+      },
+      caracteristicas: {
+        create: (item.caracteristicas || []).map((texto) => ({ texto })),
+      },
+    };
+    if (item.slug != null) data.slug = item.slug;
+    if (item.status != null) data.status = item.status;
+    if (item.condition != null) data.condition = item.condition;
+    if (item.availability != null) data.availability = item.availability;
+    if (item.brand != null) data.brand = item.brand;
+    if (item.metaTitle != null) data.metaTitle = item.metaTitle;
+    if (item.metaDescription != null) data.metaDescription = item.metaDescription;
+    if (item.ogImage != null) data.ogImage = item.ogImage;
+    if (item.categoryId != null) data.categoryId = item.categoryId;
+    if ((item.images?.length ?? 0) > 0) {
+      (data as any).images = {
+        create: item.images!.map((img, i) => ({
+          url: img.url,
+          alt: img.alt,
+          position: img.position ?? i,
+          isPrimary: img.isPrimary ?? false,
+          mediaType: (img as any).mediaType ?? 'image',
+        })),
+      };
+    }
+
+    const itemData = await prisma.marketItem.create({
+      data: data as any,
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+    });
+
+    return mapToEntity(itemData as PrismaItem);
+  }
+
+  async update(item: MarketItem): Promise<MarketItem> {
+    await prisma.marketItemDetalle.deleteMany({ where: { marketItemId: item.id } });
+    await prisma.marketItemCaracteristica.deleteMany({ where: { marketItemId: item.id } });
+    await prisma.productImage.deleteMany({ where: { marketItemId: item.id } }).catch(() => {});
+
+    const data: Record<string, unknown> = {
+      titulo: item.titulo,
+      descripcion: item.descripcion,
+      descripcionCompleta: item.descripcionCompleta,
+      precio: item.precio,
+      tipoPago: item.tipoPago ?? 'ix',
+      rubro: item.rubro,
+      ubicacion: item.ubicacion ?? 'CABA',
+      lat: item.lat,
+      lng: item.lng,
+      distancia: item.distancia,
+      imagen: item.imagen ?? '',
+      rating: item.rating ?? 0,
+      stock: item.rubro === 'servicios' ? null : resolveStockForWrite(item.rubro, item.stock),
+      detalles: {
+        create: Object.entries(item.detalles || {}).map(([clave, valor]) => ({ clave, valor })),
+      },
+      caracteristicas: {
+        create: (item.caracteristicas || []).map((texto) => ({ texto })),
+      },
+    };
+    if (item.slug != null) data.slug = item.slug;
+    if (item.status != null) data.status = item.status;
+    if (item.condition != null) data.condition = item.condition;
+    if (item.availability != null) data.availability = item.availability;
+    if (item.brand != null) data.brand = item.brand;
+    if (item.metaTitle != null) data.metaTitle = item.metaTitle;
+    if (item.metaDescription != null) data.metaDescription = item.metaDescription;
+    if (item.ogImage != null) data.ogImage = item.ogImage;
+    if (item.categoryId != null) data.categoryId = item.categoryId;
+    if ((item.images?.length ?? 0) > 0) {
+      (data as any).images = {
+        create: item.images!.map((img, i) => ({
+          url: img.url,
+          alt: img.alt,
+          position: img.position ?? i,
+          isPrimary: img.isPrimary ?? false,
+          mediaType: (img as any).mediaType ?? 'image',
+        })),
+      };
+    }
+
+    const nextStock = item.rubro === 'servicios' ? null : resolveStockForWrite(item.rubro, item.stock);
+    if (nextStock != null && nextStock > 0) {
+      (data as any).availability = 'in_stock';
+    } else if (nextStock === 0) {
+      (data as any).availability = 'out_of_stock';
+    }
+
+    const itemData = await prisma.marketItem.update({
+      where: { id: item.id },
+      data: data as any,
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+    });
+
+    return mapToEntity(itemData as PrismaItem);
+  }
+
+  async delete(id: number): Promise<void> {
+    await prisma.marketItem.delete({
+      where: { id },
+    });
+  }
+
+  async findByVendedorId(vendedorId: number): Promise<MarketItem[]> {
+    const itemsData = await prisma.marketItem.findMany({
+      where: { vendedorId },
+      include: {
+        detalles: true,
+        caracteristicas: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return itemsData.map((itemData) => mapToEntity(itemData as PrismaItem));
+  }
+}
