@@ -1,13 +1,15 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JsonWebTokenError } from 'jsonwebtoken';
 import { LoginUseCase } from '../../application/use-cases/auth/LoginUseCase.js';
 import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCase.js';
 import { VerifyMfaUseCase } from '../../application/use-cases/auth/VerifyMfaUseCase.js';
 import { RequestPasswordResetUseCase } from '../../application/use-cases/auth/RequestPasswordResetUseCase.js';
 import { ResetPasswordUseCase } from '../../application/use-cases/auth/ResetPasswordUseCase.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
+import prisma from '../../infrastructure/database/prisma.js';
 
 const userRepository = new UserRepository();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const loginUseCase = new LoginUseCase(userRepository);
 const registerUseCase = new RegisterUseCase(userRepository);
 const verifyMfaUseCase = new VerifyMfaUseCase(userRepository);
@@ -88,7 +90,7 @@ export class AuthController {
 
       const token = jwt.sign(
         { admin: true },
-        process.env.JWT_SECRET || 'your-secret-key',
+        JWT_SECRET,
         { expiresIn: '24h' }
       );
       res.json({ token });
@@ -125,6 +127,62 @@ export class AuthController {
       res.status(201).json(userWithoutPassword);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Emite un JWT nuevo. Acepta token vigente o vencido hace como máximo 30 días (misma firma / secret).
+   */
+  static async refresh(req: Request, res: Response) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+      const token = authHeader.substring(7);
+
+      let payload: jwt.JwtPayload & { userId?: number; email?: string };
+      try {
+        payload = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & { userId?: number; email?: string };
+      } catch (e) {
+        if (e instanceof jwt.TokenExpiredError) {
+          try {
+            payload = jwt.verify(token, JWT_SECRET, {
+              ignoreExpiration: true,
+            }) as jwt.JwtPayload & { userId?: number; email?: string };
+          } catch {
+            return res.status(401).json({ error: 'Token inválido' });
+          }
+          const nowSec = Math.floor(Date.now() / 1000);
+          const maxGraceSec = 60 * 60 * 24 * 30;
+          if (typeof payload.exp === 'number' && payload.exp < nowSec - maxGraceSec) {
+            return res.status(401).json({ error: 'Sesión expirada. Iniciá sesión de nuevo.' });
+          }
+        } else if (e instanceof JsonWebTokenError) {
+          return res.status(401).json({ error: 'Token inválido' });
+        } else {
+          return res.status(401).json({ error: 'Token inválido' });
+        }
+      }
+
+      const userId = payload.userId;
+      const email = typeof payload.email === 'string' ? payload.email : undefined;
+      if (typeof userId !== 'number' || !email) {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, bannedAt: true },
+      });
+      if (!user?.email || user.bannedAt) {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
+
+      const newToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+      res.json({ token: newToken });
+    } catch (error: any) {
+      res.status(500).json({ error: error?.message || 'Error al renovar sesión' });
     }
   }
 }

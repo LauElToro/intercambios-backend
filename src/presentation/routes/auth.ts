@@ -4,6 +4,7 @@ import { AuthController } from '../controllers/AuthController.js';
 export const authRouter = express.Router();
 
 authRouter.post('/login', AuthController.login);
+authRouter.post('/refresh', AuthController.refresh);
 authRouter.post('/admin-login', AuthController.adminLogin);
 authRouter.post('/verify-mfa', AuthController.verifyMfa);
 authRouter.post('/forgot-password', AuthController.requestPasswordReset);
