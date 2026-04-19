@@ -18,6 +18,7 @@ export class User {
     public readonly miembroDesde?: Date,
     public readonly ubicacion?: string,
     public readonly verificado?: boolean,
+    public readonly kycVerificado?: boolean,
     public readonly bio?: string,
     public readonly fotoPerfil?: string,
     public readonly banner?: string,
@@ -41,6 +42,7 @@ export class User {
     miembroDesde?: Date;
     ubicacion?: string;
     verificado?: boolean;
+    kycVerificado?: boolean;
     bio?: string;
     fotoPerfil?: string;
     banner?: string;
@@ -61,6 +63,7 @@ export class User {
       data.miembroDesde || new Date(),
       data.ubicacion || 'CABA',
       data.verificado || false,
+      data.kycVerificado ?? false,
       data.bio,
       data.fotoPerfil,
       data.banner,
@@ -88,6 +91,7 @@ export class User {
       miembroDesde: this.miembroDesde,
       ubicacion: this.ubicacion,
       verificado: this.verificado,
+      kycVerificado: this.kycVerificado,
       bio: this.bio,
       fotoPerfil: this.fotoPerfil,
       banner: this.banner,

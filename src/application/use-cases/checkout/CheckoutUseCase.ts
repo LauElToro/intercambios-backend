@@ -31,6 +31,12 @@ export class CheckoutUseCase {
       throw new Error('Usuario no encontrado');
     }
 
+    if (!comprador.kycVerificado) {
+      const err = new Error('KYC_REQUIRED') as Error & { code: string };
+      err.code = 'KYC_REQUIRED';
+      throw err;
+    }
+
     const vendedor = await this.userRepository.findById(item.vendedorId);
     if (!vendedor) {
       throw new Error('Vendedor no encontrado');

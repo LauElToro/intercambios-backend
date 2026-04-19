@@ -27,6 +27,12 @@ export class CheckoutController {
       const result = await checkoutUseCase.execute({ compradorId, marketItemId });
       res.status(201).json(result);
     } catch (error: any) {
+      if (error?.message === 'KYC_REQUIRED' || error?.code === 'KYC_REQUIRED') {
+        return res.status(403).json({
+          error: 'Debés verificar tu identidad antes de comprar con IOX.',
+          code: 'KYC_REQUIRED',
+        });
+      }
       res.status(400).json({ error: error.message });
     }
   }

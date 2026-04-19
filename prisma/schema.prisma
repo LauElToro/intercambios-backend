@@ -32,6 +32,9 @@ model User {
   miembroDesde  DateTime  @default(now())
   ubicacion     String
   verificado    Boolean   @default(false)
+  // Identidad verificada con Didit (KYC). distinto de verificado legado
+  kycVerificado   Boolean   @default(false)
+  kycVerificadoAt DateTime?
   bio           String?   @db.Text
   fotoPerfil    String?   // URL foto de perfil
   banner        String?   // URL banner

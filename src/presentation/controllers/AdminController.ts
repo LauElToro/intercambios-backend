@@ -191,6 +191,7 @@ export class AdminController {
             ubicacion: true,
             miembroDesde: true,
             verificado: true,
+            kycVerificado: true,
             bannedAt: true,
             _count: { select: { marketItems: true, intercambios: true } },
           },

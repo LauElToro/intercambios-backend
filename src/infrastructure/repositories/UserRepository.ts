@@ -19,6 +19,7 @@ function mapToUser(userData: any): User {
     miembroDesde: userData.miembroDesde,
     ubicacion: userData.ubicacion,
     verificado: userData.verificado,
+    kycVerificado: userData.kycVerificado ?? false,
     bio: userData.bio ?? undefined,
     fotoPerfil: userData.fotoPerfil ?? undefined,
     banner: userData.banner ?? undefined,
@@ -65,6 +66,7 @@ export class UserRepository implements IUserRepository {
         totalResenas: user.totalResenas || 0,
         ubicacion: user.ubicacion || 'CABA',
         verificado: user.verificado || false,
+        kycVerificado: user.kycVerificado ?? false,
       },
     });
 
@@ -103,6 +105,7 @@ export class UserRepository implements IUserRepository {
         totalResenas: user.totalResenas,
         ubicacion: user.ubicacion,
         verificado: user.verificado,
+        kycVerificado: user.kycVerificado ?? false,
         bio: user.bio ?? null,
         fotoPerfil: user.fotoPerfil ?? null,
         banner: user.banner ?? null,
@@ -200,6 +203,16 @@ export class UserRepository implements IUserRepository {
     await prisma.user.update({
       where: { id: userId },
       data: { passwordResetToken: null, passwordResetExpiresAt: null },
+    });
+  }
+
+  async setKycVerificado(userId: number, verified: boolean): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        kycVerificado: verified,
+        kycVerificadoAt: verified ? new Date() : null,
+      },
     });
   }
 }

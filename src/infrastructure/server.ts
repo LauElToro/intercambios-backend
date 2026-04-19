@@ -15,6 +15,8 @@ import { busquedasRouter } from '../presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../presentation/routes/notificaciones.js';
 import { referidosRouter } from '../presentation/routes/referidos.js';
 import { contactRouter } from '../presentation/routes/contact.js';
+import { kycRouter } from '../presentation/routes/kyc.js';
+import { webhooksRouter } from '../presentation/routes/webhooks.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
 
 dotenv.config();
@@ -36,6 +38,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/webhooks', webhooksRouter);
 
 // Protected routes
 app.use('/api/users', authMiddleware, usersRouter);
@@ -48,6 +51,7 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/referidos', referidosRouter);
+app.use('/api/kyc', authMiddleware, kycRouter);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

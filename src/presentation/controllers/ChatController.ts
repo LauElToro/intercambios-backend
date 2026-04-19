@@ -4,6 +4,17 @@ import prisma from '../../infrastructure/database/prisma.js';
 import { emailService } from '../../infrastructure/services/email.service.js';
 import { notificationService } from '../../infrastructure/services/notification.service.js';
 
+function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
+  const t = raw.trim();
+  if (!t.startsWith('{')) return false;
+  try {
+    const o = JSON.parse(t) as { _t?: string };
+    return o && o._t === 'intercambio';
+  } catch {
+    return false;
+  }
+}
+
 export class ChatController {
   static async getConversaciones(req: AuthRequest, res: Response) {
     try {
@@ -13,8 +24,8 @@ export class ChatController {
       const conversaciones = await prisma.conversacion.findMany({
         where: { OR: [{ compradorId: userId }, { vendedorId: userId }] },
         include: {
-          comprador: { select: { id: true, nombre: true } },
-          vendedor: { select: { id: true, nombre: true } },
+          comprador: { select: { id: true, nombre: true, kycVerificado: true } },
+          vendedor: { select: { id: true, nombre: true, kycVerificado: true } },
           marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true } },
           mensajes: {
             orderBy: { createdAt: 'desc' },
@@ -29,7 +40,7 @@ export class ChatController {
         const ultimoMensaje = c.mensajes[0];
         return {
           id: c.id,
-          otroUsuario: { id: otro.id, nombre: otro.nombre },
+          otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
           marketItem: c.marketItem,
           ultimoMensaje: ultimoMensaje
             ? { contenido: ultimoMensaje.contenido, createdAt: ultimoMensaje.createdAt }
@@ -153,8 +164,8 @@ export class ChatController {
       const conversacion = await prisma.conversacion.findUnique({
         where: { id: conversacionId },
         include: {
-          comprador: { select: { id: true, nombre: true } },
-          vendedor: { select: { id: true, nombre: true } },
+          comprador: { select: { id: true, nombre: true, kycVerificado: true } },
+          vendedor: { select: { id: true, nombre: true, kycVerificado: true } },
           marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true, precio: true } },
         },
       });
@@ -166,7 +177,7 @@ export class ChatController {
 
       const mensajes = await prisma.mensaje.findMany({
         where: { conversacionId },
-        include: { sender: { select: { id: true, nombre: true } } },
+        include: { sender: { select: { id: true, nombre: true, kycVerificado: true } } },
         orderBy: { createdAt: 'asc' },
       });
 
@@ -175,13 +186,14 @@ export class ChatController {
       res.json({
         conversacion: {
           id: conversacion.id,
-          otroUsuario: { id: otro.id, nombre: otro.nombre },
+          otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
           marketItem: conversacion.marketItem,
         },
         mensajes: mensajes.map((m) => ({
           id: m.id,
           senderId: m.senderId,
           senderNombre: m.sender.nombre,
+          senderKycVerificado: m.sender.kycVerificado ?? false,
           contenido: m.contenido,
           leido: m.leido,
           createdAt: m.createdAt,
@@ -209,9 +221,20 @@ export class ChatController {
       }
 
       const contenidoTrim = contenido.trim();
+
+      if (contenidoEsPropuestaIntercambioJson(contenidoTrim)) {
+        const u = await prisma.user.findUnique({ where: { id: userId }, select: { kycVerificado: true } });
+        if (!u?.kycVerificado) {
+          return res.status(403).json({
+            error: 'Debés verificar tu identidad antes de proponer un intercambio.',
+            code: 'KYC_REQUIRED',
+          });
+        }
+      }
+
       const mensaje = await prisma.mensaje.create({
         data: { conversacionId, senderId: userId, contenido: contenidoTrim },
-        include: { sender: { select: { id: true, nombre: true } } },
+        include: { sender: { select: { id: true, nombre: true, kycVerificado: true } } },
       });
 
       await prisma.conversacion.update({
@@ -244,6 +267,7 @@ export class ChatController {
         id: mensaje.id,
         senderId: mensaje.senderId,
         senderNombre: mensaje.sender.nombre,
+        senderKycVerificado: mensaje.sender.kycVerificado ?? false,
         contenido: mensaje.contenido,
         leido: mensaje.leido,
         createdAt: mensaje.createdAt,

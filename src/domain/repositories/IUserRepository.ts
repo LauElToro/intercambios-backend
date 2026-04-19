@@ -15,4 +15,5 @@ export interface IUserRepository {
   setPasswordResetToken(userId: number, token: string, expiresAt: Date): Promise<void>;
   findByPasswordResetToken(token: string): Promise<User | null>;
   clearPasswordResetToken(userId: number): Promise<void>;
+  setKycVerificado(userId: number, verified: boolean): Promise<void>;
 }
