@@ -4,12 +4,10 @@ import { verifyDiditWebhook } from '../../utils/diditWebhookVerify.js';
 
 const userRepository = new UserRepository();
 
-/** Secreto para HMAC de webhooks: en Didit suele llamarse "Webhook Secret Key" o `secret_shared_key` (no aparece como DIDIT_* en su consola). */
+/** Secreto HMAC: Didit → API & Webhooks → «Webhook Secret Key» → `DIDIT_WEBHOOK_SECRET`. Si falta, se intenta `API_KEY_DIDIT` (misma clave en algunos entornos). */
 function getWebhookSigningSecret(): string | undefined {
-  const a = process.env.DIDIT_WEBHOOK_SECRET?.trim();
-  if (a) return a;
-  const b = process.env.DIDIT_SECRET_SHARED_KEY?.trim();
-  if (b) return b;
+  const webhook = process.env.DIDIT_WEBHOOK_SECRET?.trim();
+  if (webhook) return webhook;
   return process.env.API_KEY_DIDIT?.trim() || undefined;
 }
 
@@ -26,11 +24,11 @@ export class DiditWebhookController {
       const secret = getWebhookSigningSecret();
       if (!secret) {
         console.error(
-          '[DiditWebhook] Falta secreto HMAC: definí DIDIT_WEBHOOK_SECRET con la "Webhook Secret Key" de Didit (API & Webhooks), o DIDIT_SECRET_SHARED_KEY / API_KEY_DIDIT si Didit te da solo eso.',
+          '[DiditWebhook] Falta DIDIT_WEBHOOK_SECRET (Webhook Secret Key en Didit → API & Webhooks). Sin eso no se puede verificar la firma.',
         );
         return res.status(503).json({
           error:
-            'Webhook Didit: falta secreto para verificar la firma. En Vercel copiá la Webhook Secret Key de Didit → API & Webhooks en DIDIT_WEBHOOK_SECRET (o DIDIT_SECRET_SHARED_KEY).',
+            'Webhook Didit: configurá DIDIT_WEBHOOK_SECRET con la Webhook Secret Key (Didit → API & Webhooks).',
         });
       }
 

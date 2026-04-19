@@ -42,7 +42,7 @@ En **Project Settings → Environment Variables** configurar:
 | `FRONTEND_URL` | URL del sitio (enlaces en correos y KYC); **no** configura CORS | Production |
 | `ID_DIDIT` | UUID del **workflow** en Didit (Console → Workflows) | Production |
 | `API_KEY_DIDIT` | API key de verificación (`x-api-key`) | Production |
-| `DIDIT_WEBHOOK_SECRET` | **Webhook Secret Key** (Didit → API & Webhooks). Si no ves el campo, registrá primero la URL del webhook. También: `DIDIT_SECRET_SHARED_KEY` o, como último recurso, reutiliza `API_KEY_DIDIT` si Didit firma con esa clave. |
+| `DIDIT_WEBHOOK_SECRET` | **Webhook Secret Key** (Didit → API & Webhooks). Registrá la URL del webhook si no te muestran la clave. Si no definís esta variable, el código intentará firmar con `API_KEY_DIDIT`. |
 
 El backend **no elige módulos por API**: lo que corre en el flujo es lo definido en ese workflow. Para usar únicamente **verificación de ID**, **liveness pasivo**, **Face Match 1:1** y **análisis de IP**, creá o editá un workflow en Didit con solo esos pasos y copiá su ID a `ID_DIDIT`.
 
