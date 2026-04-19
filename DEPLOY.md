@@ -40,11 +40,11 @@ En **Project Settings → Environment Variables** configurar:
 | `JWT_SECRET` | String aleatorio seguro | Production, Preview |
 | `BLOB_READ_WRITE_TOKEN` | Token de Vercel Blob | Production, Preview |
 | `FRONTEND_URL` | URL del sitio (enlaces en correos y KYC); **no** configura CORS | Production |
-| `ID_DIDIT` | UUID del **workflow** en Didit (Console → Workflows) | Production |
+| `WORKFLOW_DIDIT` | UUID del **workflow** en Didit (Console → Workflows). Legacy: `ID_DIDIT` también se lee si `WORKFLOW_DIDIT` está vacío. | Production |
 | `API_KEY_DIDIT` | API key de verificación (`x-api-key`) | Production |
 | `DIDIT_WEBHOOK_SECRET` | **Webhook Secret Key** (Didit → API & Webhooks). Registrá la URL del webhook si no te muestran la clave. Si no definís esta variable, el código intentará firmar con `API_KEY_DIDIT`. |
 
-El backend **no elige módulos por API**: lo que corre en el flujo es lo definido en ese workflow. Para usar únicamente **verificación de ID**, **liveness pasivo**, **Face Match 1:1** y **análisis de IP**, creá o editá un workflow en Didit con solo esos pasos y copiá su ID a `ID_DIDIT`.
+El backend **no elige módulos por API**: lo que corre en el flujo es lo definido en ese workflow. Para usar únicamente **verificación de ID**, **liveness pasivo**, **Face Match 1:1** y **análisis de IP**, creá o editá un workflow en Didit con solo esos pasos y copiá su ID a `WORKFLOW_DIDIT`.
 
 ---
 

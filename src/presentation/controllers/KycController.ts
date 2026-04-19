@@ -21,7 +21,7 @@ export class KycController {
       }
 
       // Módulos del flujo (ID, liveness, face match, IP, etc.) los define el workflow en Didit, no este código.
-      const workflowId = process.env.ID_DIDIT?.trim();
+      const workflowId = process.env.WORKFLOW_DIDIT?.trim() || process.env.ID_DIDIT?.trim();
       const apiKey = process.env.API_KEY_DIDIT?.trim();
       if (!workflowId || !apiKey) {
         return res.status(503).json({ error: 'Verificación de identidad no configurada en el servidor' });
