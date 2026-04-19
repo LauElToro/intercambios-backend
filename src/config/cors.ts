@@ -12,10 +12,9 @@ export function getCorsAllowedOrigins(): Set<string> {
   add('https://intercambius.com.ar');
   add('https://www.intercambius.com.ar');
 
-  // Desarrollo local (Vite / preview / puertos habituales)
+  // Desarrollo local (Vite / preview)
   add('http://localhost:5173');
   add('http://127.0.0.1:5173');
-  add('http://localhost:8080');
   add('http://localhost:4173');
 
   return set;
