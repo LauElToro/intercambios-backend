@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import jwt, { JsonWebTokenError } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { LoginUseCase } from '../../application/use-cases/auth/LoginUseCase.js';
 import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCase.js';
 import { VerifyMfaUseCase } from '../../application/use-cases/auth/VerifyMfaUseCase.js';
@@ -158,7 +158,7 @@ export class AuthController {
           if (typeof payload.exp === 'number' && payload.exp < nowSec - maxGraceSec) {
             return res.status(401).json({ error: 'Sesión expirada. Iniciá sesión de nuevo.' });
           }
-        } else if (e instanceof JsonWebTokenError) {
+        } else if (e instanceof jwt.JsonWebTokenError) {
           return res.status(401).json({ error: 'Token inválido' });
         } else {
           return res.status(401).json({ error: 'Token inválido' });

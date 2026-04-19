@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 
-/** Orígenes permitidos sin barra final (como envía el navegador). */
+/** Orígenes explícitos además de `*.intercambius.com.ar` (HTTPS). No usa .env: evita desalineación con el navegador. */
 export function getCorsAllowedOrigins(): Set<string> {
   const set = new Set<string>();
   const add = (raw?: string | null) => {
@@ -9,12 +9,6 @@ export function getCorsAllowedOrigins(): Set<string> {
     if (n) set.add(n);
   };
 
-  add(process.env.FRONTEND_URL);
-  for (const part of (process.env.CORS_ORIGINS || '').split(',')) {
-    add(part);
-  }
-
-  // Producción Intercambius (por si FRONTEND_URL en Vercel apunta solo a correos u otro host)
   add('https://intercambius.com.ar');
   add('https://www.intercambius.com.ar');
 
@@ -55,10 +49,6 @@ export function applyCorsHeadersIfAllowed(req: Request, res: Response): void {
 }
 
 /**
- * CORS para browser + `Authorization`. Debe ir **antes** de middlewares lentos (p. ej. DB en cold start)
- * para que el preflight OPTIONS responda rápido.
- */
-/**
  * Responde OPTIONS sin tocar la DB. Replica `Access-Control-Request-Headers` para que
  * cabeceras extra del cliente (p. ej. `X-Requested-With`) no fallen el preflight.
  */
@@ -94,6 +84,7 @@ export function handleOptionsPreflight(req: Request, res: Response, next: NextFu
   res.status(204).end();
 }
 
+/** CORS en peticiones reales (GET/POST + credenciales). Debe ir antes de middlewares lentos. */
 export function corsMiddleware() {
   const allowed = getCorsAllowedOrigins();
 

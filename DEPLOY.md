@@ -39,7 +39,7 @@ En **Project Settings → Environment Variables** configurar:
 | `DATABASE_URL` | `postgresql://user:pass@host:5432/db?sslmode=require` | Production, Preview |
 | `JWT_SECRET` | String aleatorio seguro | Production, Preview |
 | `BLOB_READ_WRITE_TOKEN` | Token de Vercel Blob | Production, Preview |
-| `FRONTEND_URL` | URL del frontend (opcional) | Production |
+| `FRONTEND_URL` | URL del sitio (enlaces en correos y KYC); **no** configura CORS | Production |
 
 ---
 
@@ -172,5 +172,5 @@ Con `SKIP_DB_MIGRATE=1`, el build ejecuta solo `prisma generate`, no `prisma mig
 
 ### CORS
 
-- Configurar `FRONTEND_URL` con la URL exacta del frontend
-- Si usás múltiples dominios, puede hacerse un middleware que evalúe el `Origin` y responda con la lista permitida
+- Los orígenes permitidos están en código (`src/config/cors.ts`): `https://intercambius.com.ar`, `www`, subdominios `*.intercambius.com.ar` y localhost en desarrollo. No hace falta `CORS_ORIGINS` ni `FRONTEND_URL` para CORS.
+- Si el navegador sigue mostrando “CORS”, comprobar en Vercel **Logs**: a menudo es `FUNCTION_INVOCATION_FAILED` (la función no arranca) y el síntoma parece CORS.
