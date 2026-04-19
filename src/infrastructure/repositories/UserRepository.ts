@@ -13,6 +13,7 @@ function mapToUser(userData: any): User {
     email: userData.email || undefined,
     ofrece: p?.ofrece ?? undefined,
     necesita: p?.necesita ?? undefined,
+    interesesQuiero: Array.isArray(p?.interesesQuiero) ? p.interesesQuiero : undefined,
     precioOferta: p?.precioOferta ?? undefined,
     rating: userData.rating ?? undefined,
     totalResenas: userData.totalResenas,
@@ -76,11 +77,13 @@ export class UserRepository implements IUserRepository {
         userId: userData.id,
         ofrece: user.ofrece ?? null,
         necesita: user.necesita ?? null,
+        interesesQuiero: user.interesesQuiero ?? [],
         precioOferta: user.precioOferta ?? null,
       },
       update: {
         ofrece: user.ofrece ?? null,
         necesita: user.necesita ?? null,
+        interesesQuiero: user.interesesQuiero ?? [],
         precioOferta: user.precioOferta ?? null,
       },
     });
@@ -119,11 +122,13 @@ export class UserRepository implements IUserRepository {
         userId: user.id,
         ofrece: user.ofrece ?? null,
         necesita: user.necesita ?? null,
+        interesesQuiero: user.interesesQuiero ?? [],
         precioOferta: user.precioOferta ?? null,
       },
       update: {
         ofrece: user.ofrece ?? null,
         necesita: user.necesita ?? null,
+        interesesQuiero: user.interesesQuiero ?? [],
         precioOferta: user.precioOferta ?? null,
       },
     });

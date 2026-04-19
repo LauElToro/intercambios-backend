@@ -86,6 +86,8 @@ model UserPerfilMercado {
   userId       Int      @unique
   ofrece       String?  @db.Text // Lo que ofrece (resumen o custom)
   necesita     String?  @db.Text // Lo que necesita (resumen o custom)
+  // Palabras clave de interés (prioridad en coincidencias; visible en perfil)
+  interesesQuiero String[] @default([])
   precioOferta Int?     // Crédito o precio oferta custom por usuario
   updatedAt    DateTime @updatedAt
 

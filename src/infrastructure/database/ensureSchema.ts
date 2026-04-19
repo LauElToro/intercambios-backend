@@ -393,6 +393,13 @@ async function runSchemaSync(): Promise<void> {
     } catch {
       // ya existe
     }
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "UserPerfilMercado" ADD COLUMN IF NOT EXISTS "interesesQuiero" TEXT[] NOT NULL DEFAULT '{}';`
+      );
+    } catch {
+      // ignorar
+    }
 
     // Intercambio: externalId, marketItemId
     try {

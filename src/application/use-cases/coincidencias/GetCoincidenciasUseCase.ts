@@ -9,6 +9,20 @@ export interface Coincidencia {
   porcentajeDiferencia: number;
 }
 
+/** Coincidencias de palabras del perfil "Lo que quiero" con título/descripción del ítem. */
+function scoreInteresEnItem(item: MarketItem, tags: string[]): number {
+  if (!tags.length) return 0;
+  const extra = item.descripcionCompleta ? ` ${item.descripcionCompleta}` : '';
+  const haystack = `${item.titulo} ${item.descripcion}${extra}`.toLowerCase();
+  let score = 0;
+  for (const tag of tags) {
+    const t = tag.trim().toLowerCase();
+    if (t.length < 2) continue;
+    if (haystack.includes(t)) score += 1;
+  }
+  return score;
+}
+
 export class GetCoincidenciasUseCase {
   constructor(
     private userRepository: IUserRepository,
@@ -40,6 +54,8 @@ export class GetCoincidenciasUseCase {
 
     const limite = user.limite ?? DEFAULT_CREDIT_LIMIT_IOX;
 
+    const intereses = (user.interesesQuiero ?? []).map((s) => s.trim()).filter((s) => s.length >= 2);
+
     const coincidencias: Coincidencia[] = itemsAproximados
       .filter(item => {
         if (item.vendedorId === userId) return false;
@@ -50,7 +66,12 @@ export class GetCoincidenciasUseCase {
         diferenciaPrecio: item.calcularDiferenciaPrecio(precioPromedio),
         porcentajeDiferencia: item.calcularPorcentajeDiferencia(precioPromedio)
       }))
-      .sort((a, b) => a.diferenciaPrecio - b.diferenciaPrecio);
+      .sort((a, b) => {
+        const da = scoreInteresEnItem(a.item, intereses);
+        const db = scoreInteresEnItem(b.item, intereses);
+        if (da !== db) return db - da;
+        return a.diferenciaPrecio - b.diferenciaPrecio;
+      });
 
     return coincidencias;
   }

@@ -12,6 +12,7 @@ export class User {
     public readonly email?: string,
     public readonly ofrece?: string,
     public readonly necesita?: string,
+    public readonly interesesQuiero?: string[],
     public readonly precioOferta?: number,
     public readonly rating?: number,
     public readonly totalResenas?: number,
@@ -36,6 +37,7 @@ export class User {
     email?: string;
     ofrece?: string;
     necesita?: string;
+    interesesQuiero?: string[];
     precioOferta?: number;
     rating?: number;
     totalResenas?: number;
@@ -57,6 +59,7 @@ export class User {
       data.email,
       data.ofrece,
       data.necesita,
+      data.interesesQuiero,
       data.precioOferta,
       data.rating,
       data.totalResenas,
@@ -85,6 +88,7 @@ export class User {
       email: this.email,
       ofrece: this.ofrece,
       necesita: this.necesita,
+      interesesQuiero: this.interesesQuiero,
       precioOferta: this.precioOferta,
       rating: this.rating,
       totalResenas: this.totalResenas,

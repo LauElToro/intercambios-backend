@@ -5,6 +5,24 @@ import { UpdateUserSaldoUseCase } from '../../application/use-cases/user/UpdateU
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { User } from '../../domain/entities/User.js';
 
+const MAX_INTERESES = 25;
+const MAX_INTERES_LEN = 80;
+
+/** Lista de intereses desde el body; [] limpia la lista. */
+function parseInteresesQuiero(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const x of raw) {
+    const s = String(x).trim().slice(0, MAX_INTERES_LEN);
+    if (s.length < 2) continue;
+    const low = s.toLowerCase();
+    if (out.some((o) => o.toLowerCase() === low)) continue;
+    out.push(s);
+    if (out.length >= MAX_INTERESES) break;
+  }
+  return out;
+}
+
 const userRepository = new UserRepository();
 const createUserUseCase = new CreateUserUseCase(userRepository);
 const updateUserSaldoUseCase = new UpdateUserSaldoUseCase(userRepository);
@@ -59,6 +77,7 @@ export class UserController {
         redesSociales: user.redesSociales,
         ofrece: user.ofrece,
         necesita: user.necesita,
+        interesesQuiero: user.interesesQuiero ?? [],
       };
       res.json(safe);
     } catch (error) {
@@ -88,6 +107,12 @@ export class UserController {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
+      const body = req.body as Record<string, unknown>;
+      const nextIntereses =
+        'interesesQuiero' in body
+          ? parseInteresesQuiero(body.interesesQuiero)
+          : existingUser.interesesQuiero;
+
       const updatedUser = User.create({
         id: existingUser.id,
         nombre: req.body.nombre ?? existingUser.nombre,
@@ -97,6 +122,7 @@ export class UserController {
         email: req.body.email ?? existingUser.email,
         ofrece: req.body.ofrece !== undefined ? req.body.ofrece : existingUser.ofrece,
         necesita: req.body.necesita !== undefined ? req.body.necesita : existingUser.necesita,
+        interesesQuiero: nextIntereses,
         precioOferta: existingUser.precioOferta,
         rating: req.body.rating ?? existingUser.rating,
         totalResenas: req.body.totalResenas ?? existingUser.totalResenas,
