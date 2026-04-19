@@ -1,3 +1,4 @@
+import type { Request, Response } from 'express';
 import cors from 'cors';
 
 /** Orígenes permitidos sin barra final (como envía el navegador). */
@@ -13,6 +14,10 @@ export function getCorsAllowedOrigins(): Set<string> {
     add(part);
   }
 
+  // Producción Intercambius (por si FRONTEND_URL en Vercel apunta solo a correos u otro host)
+  add('https://intercambius.com.ar');
+  add('https://www.intercambius.com.ar');
+
   // Desarrollo local (Vite / preview / puertos habituales)
   add('http://localhost:5173');
   add('http://127.0.0.1:5173');
@@ -20,6 +25,33 @@ export function getCorsAllowedOrigins(): Set<string> {
   add('http://localhost:4173');
 
   return set;
+}
+
+/** Apex y subdominios HTTPS de intercambius.com.ar (p. ej. staging). */
+export function isTrustedIntercambiusOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'https:') return false;
+    return u.hostname === 'intercambius.com.ar' || u.hostname.endsWith('.intercambius.com.ar');
+  } catch {
+    return false;
+  }
+}
+
+export function isCorsOriginAllowed(origin: string | undefined, allowed: Set<string>): boolean {
+  if (!origin) return true;
+  const normalized = origin.replace(/\/$/, '');
+  if (allowed.has(normalized)) return true;
+  return isTrustedIntercambiusOrigin(origin);
+}
+
+/** Cabeceras CORS en respuestas de error (Express) para que el navegador no oculte el mensaje tras CORS. */
+export function applyCorsHeadersIfAllowed(req: Request, res: Response): void {
+  const origin = req.get('Origin');
+  if (!origin || !isCorsOriginAllowed(origin, getCorsAllowedOrigins())) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
 }
 
 /**
@@ -31,18 +63,25 @@ export function corsMiddleware() {
 
   return cors({
     origin(origin, callback) {
-      // Sin header Origin: mismo origen, curl, health checks
       if (!origin) {
         return callback(null, true);
       }
-      const normalized = origin.replace(/\/$/, '');
-      if (allowed.has(normalized)) {
+      if (isCorsOriginAllowed(origin, allowed)) {
         return callback(null, origin);
       }
       return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+      'content-type',
+      'authorization',
+    ],
+    optionsSuccessStatus: 204,
   });
 }

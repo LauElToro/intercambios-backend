@@ -39,6 +39,8 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'miembroDesde');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'ubicacion');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'verificado');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'kycVerificado');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'kycVerificadoAt');
           -- Referidos
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
@@ -342,12 +344,24 @@ async function runSchemaSync(): Promise<void> {
       // ignorar
     }
 
-    // User: bio, fotoPerfil, banner, redesSociales
+    // User: bio, fotoPerfil, banner, redesSociales, KYC Didit
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fotoPerfil" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "banner" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "redesSociales" JSONB;`);
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificado" BOOLEAN NOT NULL DEFAULT false;`
+      );
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
+    } catch {
+      // ignorar
+    }
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificado" BOOLEAN NOT NULL DEFAULT false;`
+      );
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
     } catch {
       // ignorar
     }

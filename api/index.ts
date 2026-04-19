@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import { corsMiddleware } from '../src/config/cors.js';
+import { applyCorsHeadersIfAllowed, corsMiddleware } from '../src/config/cors.js';
 import { usersRouter } from '../src/presentation/routes/users.js';
 import { marketRouter } from '../src/presentation/routes/market.js';
 import { coincidenciasRouter } from '../src/presentation/routes/coincidencias.js';
@@ -98,6 +98,7 @@ app.use('/api/kyc', authMiddleware, kycRouter);
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err);
+  applyCorsHeadersIfAllowed(req, res);
   res.status(err.status || 500).json({
     error: err.message || 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
@@ -106,6 +107,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 // 404 handler
 app.use((req: Request, res: Response) => {
+  applyCorsHeadersIfAllowed(req, res);
   res.status(404).json({ error: 'Route not found' });
 });
 
