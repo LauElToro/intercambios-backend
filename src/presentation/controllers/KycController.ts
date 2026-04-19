@@ -20,6 +20,7 @@ export class KycController {
         return res.status(401).json({ error: 'No autorizado' });
       }
 
+      // Módulos del flujo (ID, liveness, face match, IP, etc.) los define el workflow en Didit, no este código.
       const workflowId = process.env.ID_DIDIT?.trim();
       const apiKey = process.env.API_KEY_DIDIT?.trim();
       if (!workflowId || !apiKey) {
