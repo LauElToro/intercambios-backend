@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
+import { corsMiddleware } from '../src/config/cors.js';
 import { usersRouter } from '../src/presentation/routes/users.js';
 import { marketRouter } from '../src/presentation/routes/market.js';
 import { coincidenciasRouter } from '../src/presentation/routes/coincidencias.js';
@@ -15,6 +15,8 @@ import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../src/presentation/routes/notificaciones.js';
 import { referidosRouter } from '../src/presentation/routes/referidos.js';
 import { contactRouter } from '../src/presentation/routes/contact.js';
+import { kycRouter } from '../src/presentation/routes/kyc.js';
+import { webhooksRouter } from '../src/presentation/routes/webhooks.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
@@ -23,6 +25,9 @@ import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 dotenv.config();
 
 const app = express();
+
+// CORS primero: el preflight OPTIONS no debe esperar a la DB (cold start en Vercel).
+app.use(corsMiddleware());
 
 // Sincronizar schema de la DB en cada cold start (añade columnas/tablas faltantes)
 app.use(async (_req: Request, _res: Response, next: NextFunction) => {
@@ -33,19 +38,6 @@ app.use(async (_req: Request, _res: Response, next: NextFunction) => {
   }
   next();
 });
-
-// CORS: el origen debe coincidir exactamente con lo que envía el navegador (sin barra final).
-// Normalizamos FRONTEND_URL y reflejamos el origen de la petición para evitar 401 por CORS.
-const allowedOrigin = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : '*';
-app.use(cors({
-  origin: (origin, callback) => {
-    if (allowedOrigin === '*' || !origin) return callback(null, true);
-    const originNormalized = origin.replace(/\/$/, '');
-    if (originNormalized === allowedOrigin) return callback(null, origin);
-    callback(null, false);
-  },
-  credentials: true,
-}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -82,6 +74,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/webhooks', webhooksRouter);
 
 // Perfil público: ver perfiles sin login (id numérico; /me va al router protegido)
 app.get('/api/users/:id', (req, res, next) => {
@@ -100,6 +93,7 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/referidos', referidosRouter);
+app.use('/api/kyc', authMiddleware, kycRouter);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
