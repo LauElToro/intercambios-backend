@@ -1,6 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { corsMiddleware } from '../config/cors.js';
+import { corsMiddleware, handleOptionsPreflight } from '../config/cors.js';
 import { usersRouter } from '../presentation/routes/users.js';
 import { marketRouter } from '../presentation/routes/market.js';
 import { coincidenciasRouter } from '../presentation/routes/coincidencias.js';
@@ -25,6 +25,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware (alineado con api/index.ts en Vercel)
+app.use(handleOptionsPreflight);
 app.use(corsMiddleware());
 app.use(express.json());
 

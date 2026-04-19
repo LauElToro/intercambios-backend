@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import { applyCorsHeadersIfAllowed, corsMiddleware } from '../src/config/cors.js';
+import { applyCorsHeadersIfAllowed, corsMiddleware, handleOptionsPreflight } from '../src/config/cors.js';
 import { usersRouter } from '../src/presentation/routes/users.js';
 import { marketRouter } from '../src/presentation/routes/market.js';
 import { coincidenciasRouter } from '../src/presentation/routes/coincidencias.js';
@@ -26,11 +26,17 @@ dotenv.config();
 
 const app = express();
 
-// CORS primero: el preflight OPTIONS no debe esperar a la DB (cold start en Vercel).
+// Preflight síncrono sin Prisma (evita que el navegador reporte solo “CORS” si el cold start falla antes).
+app.use(handleOptionsPreflight);
+// CORS en peticiones reales (GET/POST, etc.)
 app.use(corsMiddleware());
 
 // Sincronizar schema de la DB en cada cold start (añade columnas/tablas faltantes)
-app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+app.use(async (req: Request, _res: Response, next: NextFunction) => {
+  if (req.method === 'OPTIONS') {
+    next();
+    return;
+  }
   try {
     await ensureSchema();
   } catch {

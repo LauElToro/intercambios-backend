@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 
 /** Orígenes permitidos sin barra final (como envía el navegador). */
@@ -58,6 +58,42 @@ export function applyCorsHeadersIfAllowed(req: Request, res: Response): void {
  * CORS para browser + `Authorization`. Debe ir **antes** de middlewares lentos (p. ej. DB en cold start)
  * para que el preflight OPTIONS responda rápido.
  */
+/**
+ * Responde OPTIONS sin tocar la DB. Replica `Access-Control-Request-Headers` para que
+ * cabeceras extra del cliente (p. ej. `X-Requested-With`) no fallen el preflight.
+ */
+export function handleOptionsPreflight(req: Request, res: Response, next: NextFunction): void {
+  if (req.method !== 'OPTIONS') {
+    next();
+    return;
+  }
+  const origin = req.get('Origin');
+  const allowed = getCorsAllowedOrigins();
+  if (!origin) {
+    next();
+    return;
+  }
+  if (!isCorsOriginAllowed(origin, allowed)) {
+    res.status(403).end();
+    return;
+  }
+  const reqHeaders = req.get('Access-Control-Request-Headers');
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+  if (reqHeaders) {
+    res.setHeader('Access-Control-Allow-Headers', reqHeaders);
+  } else {
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Accept, Origin, X-Requested-With',
+    );
+  }
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Vary', 'Origin');
+  res.status(204).end();
+}
+
 export function corsMiddleware() {
   const allowed = getCorsAllowedOrigins();
 
