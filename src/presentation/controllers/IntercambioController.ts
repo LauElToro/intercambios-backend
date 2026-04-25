@@ -10,7 +10,7 @@ import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 const intercambioRepository = new IntercambioRepository();
 const userRepository = new UserRepository();
 const marketItemRepository = new MarketItemRepository();
-const createIntercambioUseCase = new CreateIntercambioUseCase(intercambioRepository, userRepository);
+const createIntercambioUseCase = new CreateIntercambioUseCase();
 const getIntercambiosUseCase = new GetIntercambiosUseCase(intercambioRepository);
 const confirmIntercambioUseCase = new ConfirmIntercambioUseCase(intercambioRepository);
 
@@ -25,6 +25,7 @@ function intercambioToJson(intercambio: any): Record<string, unknown> {
     fecha: intercambio.fecha,
     estado: intercambio.estado,
     marketItemId: intercambio.marketItemId,
+    conversacionId: intercambio.conversacionId ?? null,
     createdAt: intercambio.createdAt,
     updatedAt: intercambio.updatedAt,
   };
@@ -82,22 +83,43 @@ export class IntercambioController {
 
   static async createIntercambio(req: AuthRequest, res: Response) {
     try {
-      const { otraPersonaId, otraPersonaNombre, descripcion, creditos, fecha } = req.body;
-      
-      if (!otraPersonaId || !otraPersonaNombre || !descripcion || creditos === undefined) {
-        return res.status(400).json({ error: 'Faltan campos requeridos' });
-      }
+      const { otraPersonaId, otraPersonaNombre, descripcion, creditos, fecha, otraEmail } = req.body as {
+        otraPersonaId?: number;
+        otraPersonaNombre?: string;
+        descripcion?: string;
+        creditos?: number;
+        fecha?: string;
+        otraEmail?: string;
+      };
 
       if (!req.userId) {
         return res.status(401).json({ error: 'No autorizado' });
       }
 
+      let otraId = otraPersonaId != null ? Number(otraPersonaId) : NaN;
+      let otraNom = otraPersonaNombre?.trim() || '';
+      if ((!otraId || otraId <= 0 || !otraNom) && otraEmail?.trim()) {
+        const u = await userRepository.findByEmail(otraEmail.trim().toLowerCase());
+        if (!u) {
+          return res.status(400).json({ error: 'No encontramos un usuario con ese email' });
+        }
+        otraId = u.id!;
+        otraNom = u.nombre;
+      }
+
+      if (!otraId || otraId <= 0 || !otraNom || !descripcion?.trim() || creditos === undefined) {
+        return res.status(400).json({
+          error:
+            'Faltan datos: indicá la otra parte (id y nombre, o su email) y la descripción. Los créditos (IOX) son obligatorios (podés poner 0).',
+        });
+      }
+
       const intercambio = await createIntercambioUseCase.execute({
         usuarioId: req.userId,
-        otraPersonaId,
-        otraPersonaNombre,
-        descripcion,
-        creditos,
+        otraPersonaId: otraId,
+        otraPersonaNombre: otraNom,
+        descripcion: descripcion.trim(),
+        creditos: Number(creditos),
         fecha: fecha ? new Date(fecha) : undefined,
       });
 

@@ -260,6 +260,8 @@ model Intercambio {
   estado          String    @default("pendiente")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  // Trueque vía chat (código por email) — hilo con el vendedor/comprador
+  conversacionId  Int?
 
   usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
   otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
@@ -286,6 +288,8 @@ model Conversacion {
   // Código 6 dígitos para "Registrar intercambio" (se envía por email al que hizo la propuesta)
   intercambioCodigo          String?
   intercambioCodigoExpiresAt DateTime?
+  // Registro vía /registro-intercambio (IOX o acuerdo por fuera, sin doble contabilidad)
+  registroIntercambioCompletadoAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

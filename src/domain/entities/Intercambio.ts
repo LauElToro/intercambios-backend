@@ -11,6 +11,7 @@ export class Intercambio {
     public readonly fecha: Date,
     private _estado: EstadoIntercambio,
     public readonly marketItemId?: number,
+    public readonly conversacionId?: number | null,
     public readonly createdAt?: Date,
     public readonly updatedAt?: Date
   ) {}
@@ -25,6 +26,7 @@ export class Intercambio {
     fecha?: Date;
     estado?: EstadoIntercambio;
     marketItemId?: number;
+    conversacionId?: number | null;
     createdAt?: Date;
     updatedAt?: Date;
   }): Intercambio {
@@ -38,6 +40,7 @@ export class Intercambio {
       data.fecha || new Date(),
       data.estado || 'pendiente',
       data.marketItemId,
+      data.conversacionId,
       data.createdAt,
       data.updatedAt
     );

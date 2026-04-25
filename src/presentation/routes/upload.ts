@@ -5,4 +5,4 @@ import { authMiddleware } from '../../infrastructure/middleware/auth.js';
 export const uploadRouter = express.Router();
 
 uploadRouter.use(authMiddleware);
-uploadRouter.post('/', UploadController.upload, UploadController.uploadImage);
+uploadRouter.post('/', UploadController.handleUpload, UploadController.uploadImage);

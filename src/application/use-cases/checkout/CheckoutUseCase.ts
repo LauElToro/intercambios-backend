@@ -161,6 +161,7 @@ export class CheckoutUseCase {
           fecha: intercambio.fecha,
           estado: 'confirmado',
           marketItemId: intercambio.marketItemId ?? undefined,
+          conversacionId: (intercambio as { conversacionId?: number | null }).conversacionId ?? null,
           createdAt: intercambio.createdAt,
           updatedAt: intercambio.updatedAt,
         }),

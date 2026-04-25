@@ -20,6 +20,7 @@ export class IntercambioRepository implements IIntercambioRepository {
       fecha: intercambioData.fecha,
       estado: intercambioData.estado as 'pendiente' | 'confirmado' | 'cancelado',
       marketItemId: (intercambioData as any).marketItemId ?? undefined,
+      conversacionId: (intercambioData as any).conversacionId ?? null,
       createdAt: intercambioData.createdAt,
       updatedAt: intercambioData.updatedAt,
     });
@@ -40,6 +41,7 @@ export class IntercambioRepository implements IIntercambioRepository {
       fecha: intercambioData.fecha,
       estado: intercambioData.estado as 'pendiente' | 'confirmado' | 'cancelado',
       marketItemId: (intercambioData as any).marketItemId ?? undefined,
+      conversacionId: (intercambioData as any).conversacionId ?? null,
       createdAt: intercambioData.createdAt,
       updatedAt: intercambioData.updatedAt,
     });
@@ -66,6 +68,7 @@ export class IntercambioRepository implements IIntercambioRepository {
       fecha: data.fecha,
       estado: data.estado as 'pendiente' | 'confirmado' | 'cancelado',
       marketItemId: data.marketItemId ?? undefined,
+      conversacionId: data.conversacionId ?? null,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     }));
@@ -82,6 +85,7 @@ export class IntercambioRepository implements IIntercambioRepository {
         fecha: intercambio.fecha,
         estado: intercambio.estado,
         marketItemId: intercambio.marketItemId ?? null,
+        conversacionId: intercambio.conversacionId ?? null,
       },
     });
 
@@ -95,6 +99,7 @@ export class IntercambioRepository implements IIntercambioRepository {
       fecha: intercambioData.fecha,
       estado: intercambioData.estado as 'pendiente' | 'confirmado' | 'cancelado',
       marketItemId: (intercambioData as any).marketItemId ?? undefined,
+      conversacionId: (intercambioData as any).conversacionId ?? null,
       createdAt: intercambioData.createdAt,
       updatedAt: intercambioData.updatedAt,
     });
@@ -117,6 +122,8 @@ export class IntercambioRepository implements IIntercambioRepository {
       creditos: intercambioData.creditos,
       fecha: intercambioData.fecha,
       estado: intercambioData.estado as 'pendiente' | 'confirmado' | 'cancelado',
+      marketItemId: (intercambioData as any).marketItemId ?? undefined,
+      conversacionId: (intercambioData as any).conversacionId ?? null,
       createdAt: intercambioData.createdAt,
       updatedAt: intercambioData.updatedAt,
     });

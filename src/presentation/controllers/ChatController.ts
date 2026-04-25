@@ -4,6 +4,7 @@ import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { emailService, isEmailDeliveryConfigured } from '../../infrastructure/services/email.service.js';
 import { notificationService } from '../../infrastructure/services/notification.service.js';
+import { RegistroIntercambioTruequeUseCase } from '../../application/use-cases/intercambio/RegistroIntercambioTruequeUseCase.js';
 
 function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
   const t = raw.trim();
@@ -21,7 +22,41 @@ function esPropuestaIntercambioContenido(c: string): boolean {
   return /quiero realizar un intercambio/i.test(c) && (/ver mi producto/i.test(c) || /imagen del producto/i.test(c));
 }
 
+const registroIntercambioTrueque = new RegistroIntercambioTruequeUseCase();
+
 export class ChatController {
+  /**
+   * POST con código de 6 dígitos: valida, aplica acuerdo en IOX (o asiento 0 en pesos/USD) y cierra el flujo.
+   */
+  static async registroIntercambioConCodigo(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      const conversacionId = parseInt(req.params.conversacionId, 10);
+      if (!userId) return res.status(401).json({ error: 'No autorizado' });
+      if (isNaN(conversacionId)) return res.status(400).json({ error: 'ID inválido' });
+
+      const { codigo, descripcion, fecha } = req.body as {
+        codigo?: string;
+        descripcion?: string;
+        fecha?: string;
+      };
+      if (!codigo || !String(descripcion).trim()) {
+        return res.status(400).json({ error: 'Código y descripción son obligatorios' });
+      }
+
+      const result = await registroIntercambioTrueque.execute({
+        userId,
+        conversacionId,
+        codigo: String(codigo),
+        descripcion: String(descripcion).trim(),
+        fecha: fecha ? new Date(fecha) : new Date(),
+      });
+      return res.status(201).json(result);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'Error al registrar' });
+    }
+  }
+
   static async getConversaciones(req: AuthRequest, res: Response) {
     try {
       const userId = req.userId;

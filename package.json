@@ -20,7 +20,8 @@
     "db:check-coords": "tsx scripts/check-and-backfill-coords.ts",
     "vercel-build": "node scripts/vercel-build.cjs",
     "gmail-oauth-token": "tsx scripts/gmail-oauth-token.ts",
-    "kyc:approve": "tsx scripts/kyc-approve-by-email.ts"
+    "kyc:approve": "tsx scripts/kyc-approve-by-email.ts",
+    "email:codigo-intercambio": "tsx scripts/enviar-codigo-intercambio-manual.ts"
   },
   "keywords": [
     "intercambius",

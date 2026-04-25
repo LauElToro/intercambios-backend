@@ -11,5 +11,10 @@ chatRouter.post(
   authMiddleware,
   ChatController.enviarCodigoIntercambio
 );
+chatRouter.post(
+  '/:conversacionId/registro-intercambio',
+  authMiddleware,
+  ChatController.registroIntercambioConCodigo
+);
 chatRouter.get('/:conversacionId', authMiddleware, ChatController.getMensajes);
 chatRouter.post('/:conversacionId', authMiddleware, ChatController.enviarMensaje);

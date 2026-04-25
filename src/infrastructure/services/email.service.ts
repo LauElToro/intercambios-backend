@@ -294,12 +294,18 @@ export const emailService = {
     nombreDestinatario: string;
     nombreQuienAprueba: string;
     codigo: string;
+    /** Ej. monto IOX o resumen del acuerdo (opcional). */
+    acuerdoResumen?: string;
   }): Promise<void> {
-    const { to, nombreDestinatario, nombreQuienAprueba, codigo } = params;
+    const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen } = params;
     const registroUrl = `${FRONTEND_URL}/registrar-intercambio`;
     const aviso = `Solo entregá este código cuando te encuentres con la otra parte y/o recibas el producto.`;
+    const refBlock = acuerdoResumen
+      ? `<p style="margin: 0 0 12px 0; padding: 10px 12px; background: #f4f4f4; border-radius: 8px; font-size: 14px; color: #333;"><strong>Referencia del acuerdo:</strong> ${escapeHtml(acuerdoResumen)}</p>`
+      : '';
     const content = `
       <p style="margin: 0 0 16px 0; font-size: 18px; color: #1a1a1a;">Hola ${escapeHtml(nombreDestinatario)},</p>
+      ${refBlock}
       <p style="margin: 0 0 12px 0;">${escapeHtml(nombreQuienAprueba)} aprobó el intercambio. Tu código de verificación para <strong>Registrar intercambio</strong> es:</p>
       <p style="margin: 0 0 20px 0; font-size: 28px; letter-spacing: 8px; font-weight: 700; color: #b8860b;">${escapeHtml(codigo)}</p>
       <p style="margin: 0 0 16px 0; padding: 12px 14px; background: #fff8e6; border-left: 4px solid #b8860b; border-radius: 6px; font-size: 14px; color: #333;">${escapeHtml(aviso)}</p>
@@ -311,7 +317,7 @@ export const emailService = {
       to,
       subject: `Código de verificación — ${APP_NAME}`,
       html: emailLayout(content),
-      text: `Hola ${nombreDestinatario}, ${nombreQuienAprueba} aprobó el intercambio. Código: ${codigo}. ${aviso} Registrá en ${registroUrl}`,
+      text: `Hola ${nombreDestinatario},${acuerdoResumen ? ` ${acuerdoResumen}.` : ''} ${nombreQuienAprueba} aprobó el intercambio. Código: ${codigo}. ${aviso} Registrá en ${registroUrl}`,
     });
   },
 

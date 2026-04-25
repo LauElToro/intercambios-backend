@@ -1,13 +1,16 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { uploadImage } from '../../infrastructure/storage/vercel-blob.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import multer from 'multer';
+
+/** Vercel (serverless) limita el body; por archivo evitamos superar el techo y fallar con error opaco. */
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
 
 // Configurar multer para manejar archivos en memoria
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB (para video)
+    fileSize: MAX_FILE_BYTES,
   },
   fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
@@ -20,6 +23,24 @@ const upload = multer({
 
 export class UploadController {
   static upload = upload.single('image');
+
+  /** Atrapa errores de multer (tamaño, etc.) y devuelve JSON en lugar de cortar la request. */
+  static handleUpload = (req: Request, res: Response, next: NextFunction) => {
+    UploadController.upload(req, res, (err: unknown) => {
+      if (err) {
+        const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
+        if (code === 'LIMIT_FILE_SIZE') {
+          return res.status(413).json({
+            error:
+              'El archivo supera 4 MB. En el servidor (Vercel) el límite de subida es bajo: probá otra resolución o un video más corto.',
+          });
+        }
+        const message = err instanceof Error ? err.message : 'Error al recibir el archivo';
+        return res.status(400).json({ error: message });
+      }
+      next();
+    });
+  };
 
   static async uploadImage(req: AuthRequest, res: Response) {
     try {

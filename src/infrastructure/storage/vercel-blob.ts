@@ -27,6 +27,16 @@ export async function uploadImage(file: File | Buffer | Uint8Array | Blob, filen
     };
   } catch (error) {
     console.error('Error uploading to Vercel Blob:', error);
+    const reason = error instanceof Error ? error.message : String(error);
+    if (/BLOB_READ_WRITE_TOKEN|no configurado|not configured/i.test(reason)) {
+      throw new Error('BLOB_READ_WRITE_TOKEN no configurado en el servidor (revisá variables de entorno en Vercel).');
+    }
+    if (/401|403|unauthori|invalid token|forbidden|not allowed/i.test(reason)) {
+      throw new Error('Token de Vercel Blob inválido o revocado. Generá un nuevo BLOB_READ_WRITE_TOKEN en el dashboard y actualizá Vercel.');
+    }
+    if (/body.*limit|413|too large|payload|4\.5|4,5|mb/i.test(reason)) {
+      throw new Error('El archivo no cabe en el límite de subida del servidor; probá un archivo más pequeño.');
+    }
     throw new Error('Error al subir la imagen');
   }
 }
