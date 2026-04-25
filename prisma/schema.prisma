@@ -283,6 +283,9 @@ model Conversacion {
   vendedorId    Int
   marketItemId  Int?
   intercambioId Int?
+  // Código 6 dígitos para "Registrar intercambio" (se envía por email al que hizo la propuesta)
+  intercambioCodigo          String?
+  intercambioCodigoExpiresAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

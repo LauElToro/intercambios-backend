@@ -480,6 +480,17 @@ async function runSchemaSync(): Promise<void> {
       // ya existe
     }
 
+    try {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Conversacion" ADD COLUMN IF NOT EXISTS "intercambioCodigo" TEXT;`
+      );
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Conversacion" ADD COLUMN IF NOT EXISTS "intercambioCodigoExpiresAt" TIMESTAMP(3);`
+      );
+    } catch {
+      // ignorar
+    }
+
     // FKs si no existen
     const fks = [
       ['MarketItem', 'MarketItem_vendedorId_fkey', '"vendedorId"', 'User', 'CASCADE'],

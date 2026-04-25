@@ -1,7 +1,8 @@
+import { randomInt } from 'node:crypto';
 import { Response } from 'express';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
-import { emailService } from '../../infrastructure/services/email.service.js';
+import { emailService, isEmailDeliveryConfigured } from '../../infrastructure/services/email.service.js';
 import { notificationService } from '../../infrastructure/services/notification.service.js';
 
 function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
@@ -13,6 +14,11 @@ function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
   } catch {
     return false;
   }
+}
+
+function esPropuestaIntercambioContenido(c: string): boolean {
+  if (contenidoEsPropuestaIntercambioJson(c)) return true;
+  return /quiero realizar un intercambio/i.test(c) && (/ver mi producto/i.test(c) || /imagen del producto/i.test(c));
 }
 
 export class ChatController {
@@ -198,6 +204,107 @@ export class ChatController {
           leido: m.leido,
           createdAt: m.createdAt,
         })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Quien recibió la propuesta de intercambio genera un código y lo envía por email
+   * a quien hizo la propuesta (para "Registrar intercambio"). No se envía el código en el chat.
+   */
+  static async enviarCodigoIntercambio(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      const conversacionId = parseInt(req.params.conversacionId, 10);
+      if (!userId) return res.status(401).json({ error: 'No autorizado' });
+      if (isNaN(conversacionId)) return res.status(400).json({ error: 'ID inválido' });
+
+      if (!isEmailDeliveryConfigured()) {
+        return res.status(503).json({
+          error: 'El envío de códigos por email no está configurado en el servidor (SMTP / OAuth).',
+        });
+      }
+
+      const me = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { kycVerificado: true, nombre: true },
+      });
+      if (!me?.kycVerificado) {
+        return res.status(403).json({
+          error: 'Debés verificar tu identidad antes de enviar el código.',
+          code: 'KYC_REQUIRED',
+        });
+      }
+
+      const conversacion = await prisma.conversacion.findUnique({ where: { id: conversacionId } });
+      if (!conversacion) return res.status(404).json({ error: 'Conversación no encontrada' });
+      if (conversacion.compradorId !== userId && conversacion.vendedorId !== userId) {
+        return res.status(403).json({ error: 'No tenés acceso a esta conversación' });
+      }
+
+      const mensajes = await prisma.mensaje.findMany({
+        where: { conversacionId },
+        orderBy: { createdAt: 'asc' },
+        select: { senderId: true, contenido: true },
+      });
+
+      const firstProp = mensajes.find((m) => esPropuestaIntercambioContenido(m.contenido));
+      if (!firstProp) {
+        return res.status(400).json({ error: 'No hay una propuesta de intercambio en esta conversación' });
+      }
+      if (firstProp.senderId === userId) {
+        return res.status(403).json({ error: 'Solo quien recibió la propuesta puede enviar el código' });
+      }
+
+      const proposerId = firstProp.senderId;
+      const proposer = await prisma.user.findUnique({
+        where: { id: proposerId },
+        select: { id: true, email: true, nombre: true },
+      });
+      if (!proposer?.email?.trim()) {
+        return res.status(400).json({ error: 'La otra parte no tiene un email en la cuenta' });
+      }
+
+      const code = String(randomInt(100000, 1_000_000));
+      const intercambioCodigoExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      try {
+        await emailService.sendIntercambioVerificationCode({
+          to: proposer.email.trim(),
+          nombreDestinatario: proposer.nombre,
+          nombreQuienAprueba: me.nombre,
+          codigo: code,
+        });
+      } catch (e) {
+        console.error('[ChatController] enviarCodigoIntercambio email', e);
+        return res.status(502).json({ error: 'No se pudo enviar el email. Intentá de nuevo en unos minutos.' });
+      }
+
+      await prisma.conversacion.update({
+        where: { id: conversacionId },
+        data: { intercambioCodigo: code, intercambioCodigoExpiresAt, updatedAt: new Date() },
+      });
+
+      const infoMsg = `Código de verificación enviado por email a ${proposer.nombre} (revisá tu casilla). Ingresalo en «Registrar intercambio» para confirmar — solo cuando te encuentres y/o recibas el producto.`;
+      await prisma.mensaje.create({
+        data: { conversacionId, senderId: userId, contenido: infoMsg },
+      });
+      await prisma.conversacion.update({ where: { id: conversacionId }, data: { updatedAt: new Date() } });
+
+      if (proposer.id) {
+        const preview = infoMsg.replace(/\s+/g, ' ').slice(0, 150);
+        notificationService
+          .onNuevoMensaje(proposer.id, me.nombre, conversacionId, preview)
+          .catch(() => {});
+      }
+
+      return res.status(201).json({
+        ok: true,
+        emailEnviadoA: proposer.nombre,
+        mensaje:
+          'Se envió un código de 6 dígitos por email. La otra parte no verá el código en el chat.',
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

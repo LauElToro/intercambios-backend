@@ -58,6 +58,11 @@ function isMailConfigured(): boolean {
   return Boolean(SMTP_PASS);
 }
 
+/** Expuesto para flujos que requieren envío real (p. ej. código de intercambio). */
+export function isEmailDeliveryConfigured(): boolean {
+  return isMailConfigured();
+}
+
 const FROM = process.env.SMTP_FROM || SMTP_USER || '"Intercambius" <Intercambius.info@gmail.com>';
 const APP_NAME = 'Intercambius';
 
@@ -280,6 +285,33 @@ export const emailService = {
         content: a.content,
         contentType: a.contentType,
       })),
+    });
+  },
+
+  /** Código de verificación para registrar intercambio (quien aprobó envía al otro vía plataforma). */
+  async sendIntercambioVerificationCode(params: {
+    to: string;
+    nombreDestinatario: string;
+    nombreQuienAprueba: string;
+    codigo: string;
+  }): Promise<void> {
+    const { to, nombreDestinatario, nombreQuienAprueba, codigo } = params;
+    const registroUrl = `${FRONTEND_URL}/registrar-intercambio`;
+    const aviso = `Solo entregá este código cuando te encuentres con la otra parte y/o recibas el producto.`;
+    const content = `
+      <p style="margin: 0 0 16px 0; font-size: 18px; color: #1a1a1a;">Hola ${escapeHtml(nombreDestinatario)},</p>
+      <p style="margin: 0 0 12px 0;">${escapeHtml(nombreQuienAprueba)} aprobó el intercambio. Tu código de verificación para <strong>Registrar intercambio</strong> es:</p>
+      <p style="margin: 0 0 20px 0; font-size: 28px; letter-spacing: 8px; font-weight: 700; color: #b8860b;">${escapeHtml(codigo)}</p>
+      <p style="margin: 0 0 16px 0; padding: 12px 14px; background: #fff8e6; border-left: 4px solid #b8860b; border-radius: 6px; font-size: 14px; color: #333;">${escapeHtml(aviso)}</p>
+      <p style="margin: 0 0 20px 0;"><a href="${registroUrl}" style="${btnStyle}">Ir a registrar intercambio</a></p>
+      <p style="margin: 0; color: #666666; font-size: 14px;">Si no reconocés este intercambio, ignorá este correo.</p>
+    `;
+    await safeSend({
+      from: FROM,
+      to,
+      subject: `Código de verificación — ${APP_NAME}`,
+      html: emailLayout(content),
+      text: `Hola ${nombreDestinatario}, ${nombreQuienAprueba} aprobó el intercambio. Código: ${codigo}. ${aviso} Registrá en ${registroUrl}`,
     });
   },
 
