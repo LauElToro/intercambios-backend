@@ -1,27 +1,69 @@
 import nodemailer from 'nodemailer';
 
-const SMTP_PASS = process.env.SMTP_PASS?.replace(/^["']|["']$/g, '').trim() || process.env.SMTP_PASS;
+function trimEnv(v: string | undefined): string | undefined {
+  if (v == null) return undefined;
+  const t = v.replace(/^["']|["']$/g, '').trim();
+  return t || undefined;
+}
+
+const SMTP_USER = trimEnv(process.env.SMTP_USER);
+const SMTP_PASS = trimEnv(process.env.SMTP_PASS);
+const GMAIL_OAUTH_CLIENT_ID = trimEnv(process.env.GMAIL_OAUTH_CLIENT_ID);
+const GMAIL_OAUTH_CLIENT_SECRET = trimEnv(process.env.GMAIL_OAUTH_CLIENT_SECRET);
+const GMAIL_OAUTH_REFRESH_TOKEN = trimEnv(process.env.GMAIL_OAUTH_REFRESH_TOKEN);
+
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 const LOGO_URL = process.env.LOGO_URL || `${FRONTEND_URL}/logo-intercambius.png`;
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: process.env.SMTP_USER
-    ? { user: process.env.SMTP_USER, pass: SMTP_PASS }
-    : undefined,
-});
+function usesGmailOAuth(): boolean {
+  return Boolean(
+    SMTP_USER && GMAIL_OAUTH_CLIENT_ID && GMAIL_OAUTH_CLIENT_SECRET && GMAIL_OAUTH_REFRESH_TOKEN,
+  );
+}
 
-const FROM =
-  process.env.SMTP_FROM ||
-  process.env.SMTP_USER ||
-  '"Intercambius" <Intercambius.info@gmail.com>';
+function createTransporter(): nodemailer.Transporter {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
+  if (usesGmailOAuth()) {
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        type: 'OAuth2',
+        user: SMTP_USER,
+        clientId: GMAIL_OAUTH_CLIENT_ID,
+        clientSecret: GMAIL_OAUTH_CLIENT_SECRET,
+        refreshToken: GMAIL_OAUTH_REFRESH_TOKEN,
+      },
+    });
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+  });
+}
+
+const transporter = createTransporter();
+
+/** Correo habilitado con OAuth2 (recomendado Gmail) o con SMTP_USER + SMTP_PASS (otros proveedores / legado). */
+function isMailConfigured(): boolean {
+  if (!SMTP_USER) return false;
+  if (usesGmailOAuth()) return true;
+  return Boolean(SMTP_PASS);
+}
+
+const FROM = process.env.SMTP_FROM || SMTP_USER || '"Intercambius" <Intercambius.info@gmail.com>';
 const APP_NAME = 'Intercambius';
 
 function safeSend(mailOptions: nodemailer.SendMailOptions): Promise<void> {
-  if (!process.env.SMTP_USER) {
-    console.log('[EMAIL] Sin SMTP_USER, no se envía:', mailOptions.to, mailOptions.subject);
+  if (!isMailConfigured()) {
+    console.log('[EMAIL] Sin SMTP configurado (OAuth2 o SMTP_PASS), no se envía:', mailOptions.to, mailOptions.subject);
     return Promise.resolve();
   }
   return transporter

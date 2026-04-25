@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { verifyDiditWebhook } from '../../utils/diditWebhookVerify.js';
+import { parseUserIdFromVendorData } from '../../utils/diditVendorData.js';
+import {
+  diditStatusIndicatesApproved,
+  diditStatusIndicatesTerminalRejection,
+} from '../../infrastructure/services/diditSession.service.js';
 
 const userRepository = new UserRepository();
 
@@ -11,12 +16,18 @@ function getWebhookSigningSecret(): string | undefined {
   return process.env.API_KEY_DIDIT?.trim() || undefined;
 }
 
-function parseUserIdFromVendorData(vendorData: unknown): number | null {
-  if (vendorData == null) return null;
-  const n = parseInt(String(vendorData).trim(), 10);
-  if (!Number.isFinite(n) || n < 1) return null;
-  return n;
+function extractVendorData(body: Record<string, unknown>): unknown {
+  const top = body.vendor_data;
+  if (top != null && top !== '') return top;
+  const dec = body.decision;
+  if (dec && typeof dec === 'object') {
+    const vd = (dec as Record<string, unknown>).vendor_data;
+    if (vd != null && vd !== '') return vd;
+  }
+  return null;
 }
+
+const KYC_WEBHOOK_TYPES = new Set(['status.updated', 'data.updated']);
 
 export class DiditWebhookController {
   static async handle(req: Request, res: Response) {
@@ -47,19 +58,25 @@ export class DiditWebhookController {
       }
 
       const webhookType = String(body.webhook_type ?? '');
-      if (webhookType !== 'status.updated') {
-        return res.status(200).json({ ok: true, ignored: true });
-      }
-
-      const userId = parseUserIdFromVendorData(body.vendor_data);
-      if (userId == null) {
+      if (!KYC_WEBHOOK_TYPES.has(webhookType)) {
         return res.status(200).json({ ok: true, ignored: true });
       }
 
       const status = String(body.status ?? '');
-      if (status === 'Approved') {
+      const userId = parseUserIdFromVendorData(extractVendorData(body));
+      if (userId == null) {
+        console.warn('[DiditWebhook] Sin vendor_data reconocible', {
+          webhook_type: webhookType,
+          session_id: body.session_id,
+          status,
+        });
+        return res.status(200).json({ ok: true, ignored: true });
+      }
+
+      if (diditStatusIndicatesApproved(status)) {
         await userRepository.setKycVerificado(userId, true);
-      } else if (status === 'Declined' || status === 'Abandoned') {
+        console.log('[DiditWebhook] KYC aprobado userId=%s session=%s', userId, String(body.session_id ?? ''));
+      } else if (diditStatusIndicatesTerminalRejection(status)) {
         await userRepository.setKycVerificado(userId, false);
       }
 

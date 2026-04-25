@@ -79,3 +79,49 @@ export async function createDiditVerificationSession(opts: {
   const sessionId = typeof json.session_id === 'string' ? json.session_id : undefined;
   return { url, sessionId };
 }
+
+function normalizeDiditStatus(status: string): string {
+  return status.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** API decision puede devolver "APPROVED"; webhooks usan "Approved". */
+export function diditStatusIndicatesApproved(status: string): boolean {
+  return normalizeDiditStatus(status) === 'approved';
+}
+
+export function diditStatusIndicatesTerminalRejection(status: string): boolean {
+  const n = normalizeDiditStatus(status);
+  return n === 'declined' || n === 'abandoned' || n === 'expired' || n === 'kyc expired';
+}
+
+/** GET .../v3/session/:id/decision/ — mismo criterio de estado que en webhooks. */
+export async function fetchDiditSessionDecision(
+  sessionId: string,
+  apiKey: string
+): Promise<{ status: string; vendorData?: string }> {
+  const url = `https://verification.didit.me/v3/session/${encodeURIComponent(sessionId)}/decision/`;
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { 'x-api-key': apiKey },
+    signal: AbortSignal.timeout(25_000),
+  });
+  const text = await res.text();
+  let json: Record<string, unknown> = {};
+  try {
+    json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    throw new Error(`Didit decision: respuesta no JSON (${res.status})`);
+  }
+  if (!res.ok) {
+    const msg =
+      typeof json.detail === 'string'
+        ? json.detail
+        : typeof json.message === 'string'
+          ? json.message
+          : text.slice(0, 200);
+    throw new DiditApiError(msg || `Didit decision HTTP ${res.status}`, res.status);
+  }
+  const status = typeof json.status === 'string' ? json.status : '';
+  const vendorData = typeof json.vendor_data === 'string' ? json.vendor_data : undefined;
+  return { status, vendorData };
+}

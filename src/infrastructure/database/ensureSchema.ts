@@ -41,6 +41,7 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'verificado');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'kycVerificado');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'kycVerificadoAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'kycLastDiditSessionId');
           -- Referidos
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
@@ -354,6 +355,7 @@ async function runSchemaSync(): Promise<void> {
         `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificado" BOOLEAN NOT NULL DEFAULT false;`
       );
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
     } catch {
       // ignorar
     }
@@ -362,6 +364,7 @@ async function runSchemaSync(): Promise<void> {
         `ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificado" BOOLEAN NOT NULL DEFAULT false;`
       );
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
     } catch {
       // ignorar
     }

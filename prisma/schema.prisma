@@ -36,6 +36,7 @@ model User {
   // Identidad verificada con Didit (KYC). distinto de verificado legado
   kycVerificado   Boolean   @default(false)
   kycVerificadoAt DateTime?
+  kycLastDiditSessionId String? // última sesión Didit (sync al volver del flujo)
   bio           String?   @db.Text
   fotoPerfil    String?   // URL foto de perfil
   banner        String?   // URL banner

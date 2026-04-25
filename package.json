@@ -18,7 +18,9 @@
     "db:seed-100": "tsx src/infrastructure/database/seed-100-products.ts",
     "db:backfill-coords": "tsx scripts/backfill-product-coords.ts",
     "db:check-coords": "tsx scripts/check-and-backfill-coords.ts",
-    "vercel-build": "node scripts/vercel-build.cjs"
+    "vercel-build": "node scripts/vercel-build.cjs",
+    "gmail-oauth-token": "tsx scripts/gmail-oauth-token.ts",
+    "kyc:approve": "tsx scripts/kyc-approve-by-email.ts"
   },
   "keywords": [
     "intercambius",
@@ -52,6 +54,7 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.5",
     "@types/nodemailer": "^7.0.10",
+    "google-auth-library": "^9.15.1",
     "prisma": "^5.7.1",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"

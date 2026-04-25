@@ -220,4 +220,19 @@ export class UserRepository implements IUserRepository {
       },
     });
   }
+
+  async setKycDiditSessionId(userId: number, sessionId: string | null): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { kycLastDiditSessionId: sessionId },
+    });
+  }
+
+  async getKycDiditSessionId(userId: number): Promise<string | null> {
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { kycLastDiditSessionId: true },
+    });
+    return u?.kycLastDiditSessionId ?? null;
+  }
 }

@@ -39,7 +39,8 @@ export function verifyDiditSignatureV2(
 ): boolean {
   const currentTime = Math.floor(Date.now() / 1000);
   const incomingTime = parseInt(timestampHeader, 10);
-  if (!Number.isFinite(incomingTime) || Math.abs(currentTime - incomingTime) > 300) {
+  // Relajado vs 5 min: cold starts / desvío de reloj entre Didit y el servidor.
+  if (!Number.isFinite(incomingTime) || Math.abs(currentTime - incomingTime) > 600) {
     return false;
   }
 
@@ -66,7 +67,7 @@ export function verifyDiditSignatureSimple(
 ): boolean {
   const currentTime = Math.floor(Date.now() / 1000);
   const incomingTime = parseInt(timestampHeader, 10);
-  if (!Number.isFinite(incomingTime) || Math.abs(currentTime - incomingTime) > 300) {
+  if (!Number.isFinite(incomingTime) || Math.abs(currentTime - incomingTime) > 600) {
     return false;
   }
 
