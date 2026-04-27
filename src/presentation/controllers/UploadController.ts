@@ -63,7 +63,7 @@ export class UploadController {
         ? `${folder}/${req.userId}/banner-${timestamp}${ext || '.jpg'}`
         : `market/${req.userId}/${timestamp}-${originalName}${ext}`;
 
-      const result = await uploadImage(req.file.buffer, filename);
+      const result = await uploadImage(req.file.buffer, filename, req.file.mimetype);
       
       res.json({
         url: result.url,
