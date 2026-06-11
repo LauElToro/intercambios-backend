@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
+import { normalizeEmail } from '../../../utils/normalizeEmail.js';
 
 const MFA_CODE_EXPIRY_MINUTES = 10;
 const MFA_TEMP_TOKEN_EXPIRY = '15m';
@@ -20,7 +21,7 @@ export class SendMfaAndRequireVerificationUseCase {
   constructor(private userRepository: IUserRepository) {}
 
   async execute(userId: number, email: string): Promise<{ mfaToken: string; sentTo: string }> {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const code = generateSixDigitCode();
     const hashedCode = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + MFA_CODE_EXPIRY_MINUTES * 60 * 1000);

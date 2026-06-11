@@ -1,6 +1,7 @@
 import { User } from '../../domain/entities/User.js';
 import { IUserRepository } from '../../domain/repositories/IUserRepository.js';
 import prisma from '../database/prisma.js';
+import { normalizeEmail } from '../../utils/normalizeEmail.js';
 
 function mapToUser(userData: any): User {
   const p = userData.perfilMercado;
@@ -39,8 +40,9 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    const userData = await prisma.user.findUnique({
-      where: { email },
+    const normalized = normalizeEmail(email);
+    const userData = await prisma.user.findFirst({
+      where: { email: { equals: normalized, mode: 'insensitive' } },
       include: { perfilMercado: true },
     });
     if (!userData) return null;
@@ -61,7 +63,7 @@ export class UserRepository implements IUserRepository {
         contacto: user.contacto,
         saldo: user.saldo,
         limite: user.limite,
-        email: user.email || '',
+        email: normalizeEmail(user.email || ''),
         password: password || '',
         rating: user.rating,
         totalResenas: user.totalResenas || 0,
@@ -154,8 +156,9 @@ export class UserRepository implements IUserRepository {
   }
 
   async getUserWithPassword(email: string): Promise<{ user: User; password: string } | null> {
-    const userData = await prisma.user.findUnique({
-      where: { email },
+    const normalized = normalizeEmail(email);
+    const userData = await prisma.user.findFirst({
+      where: { email: { equals: normalized, mode: 'insensitive' } },
       include: { perfilMercado: true },
     });
     if (!userData) return null;

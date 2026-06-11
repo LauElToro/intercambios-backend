@@ -62,6 +62,12 @@ export class AuthController {
       await requestPasswordResetUseCase.execute(email);
       res.json({ message: 'Si el email existe, recibirás un enlace para restablecer tu contraseña' });
     } catch (error: any) {
+      if (isEmailDeliveryError(error)) {
+        return res.status(503).json({
+          error:
+            'No pudimos enviar el email de restablecimiento. Intentá de nuevo en unos minutos o escribinos a noreply@intercambius.com.ar.',
+        });
+      }
       res.status(500).json({ error: error.message });
     }
   }

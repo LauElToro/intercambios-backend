@@ -4,6 +4,7 @@ import { User } from '../../../domain/entities/User.js';
 import { RegisterData } from '../../../domain/entities/Auth.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
 import prisma from '../../../infrastructure/database/prisma.js';
+import { normalizeEmail } from '../../../utils/normalizeEmail.js';
 
 export class RegisterUseCase {
   constructor(private userRepository: IUserRepository) {}
@@ -13,7 +14,8 @@ export class RegisterUseCase {
       throw new Error('Debés aceptar los términos y condiciones para registrarte');
     }
 
-    const existingUser = await this.userRepository.findByEmail(data.email);
+    const email = normalizeEmail(data.email);
+    const existingUser = await this.userRepository.findByEmail(email);
     if (existingUser) {
       throw new Error('El email ya está registrado');
     }
@@ -26,7 +28,7 @@ export class RegisterUseCase {
       ofrece: '',
       necesita: '',
       precioOferta: 0,
-      email: data.email,
+      email,
       ubicacion: data.ubicacion,
     });
 

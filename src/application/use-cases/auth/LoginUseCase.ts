@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { LoginCredentials } from '../../../domain/entities/Auth.js';
 import { SendMfaAndRequireVerificationUseCase } from './SendMfaAndRequireVerificationUseCase.js';
+import { normalizeEmail } from '../../../utils/normalizeEmail.js';
 
 export class LoginUseCase {
   private sendMfaUseCase: SendMfaAndRequireVerificationUseCase;
@@ -11,7 +12,7 @@ export class LoginUseCase {
   }
 
   async execute(credentials: LoginCredentials): Promise<{ mfaRequired: true; mfaToken: string; mfaSentTo: string }> {
-    const emailInput = credentials.email.trim().toLowerCase();
+    const emailInput = normalizeEmail(credentials.email);
     const result = await this.userRepository.getUserWithPassword(emailInput);
 
     if (!result) {
@@ -26,7 +27,7 @@ export class LoginUseCase {
       throw new Error('Credenciales inválidas');
     }
 
-    const email = (user.email || emailInput).trim().toLowerCase();
+    const email = normalizeEmail(user.email || emailInput);
     const { mfaToken, sentTo } = await this.sendMfaUseCase.execute(user.id, email);
     return { mfaRequired: true, mfaToken, mfaSentTo: sentTo };
   }
