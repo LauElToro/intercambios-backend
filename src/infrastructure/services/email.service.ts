@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
+import { OAuth2Client } from 'google-auth-library';
 import { DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
+import { EmailDeliveryError } from './email.errors.js';
 
 function trimEnv(v: string | undefined): string | undefined {
   if (v == null) return undefined;
@@ -22,37 +24,6 @@ function usesGmailOAuth(): boolean {
   );
 }
 
-function createTransporter(): nodemailer.Transporter {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  if (usesGmailOAuth()) {
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        type: 'OAuth2',
-        user: SMTP_USER,
-        clientId: GMAIL_OAUTH_CLIENT_ID,
-        clientSecret: GMAIL_OAUTH_CLIENT_SECRET,
-        refreshToken: GMAIL_OAUTH_REFRESH_TOKEN,
-      },
-    });
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
-  });
-}
-
-const transporter = createTransporter();
-
-/** Correo habilitado con OAuth2 (recomendado Gmail) o con SMTP_USER + SMTP_PASS (otros proveedores / legado). */
 function isMailConfigured(): boolean {
   if (!SMTP_USER) return false;
   if (usesGmailOAuth()) return true;
@@ -67,18 +38,105 @@ export function isEmailDeliveryConfigured(): boolean {
 const FROM = process.env.SMTP_FROM || SMTP_USER || DEFAULT_SMTP_FROM;
 const APP_NAME = 'Intercambius';
 
-function safeSend(mailOptions: nodemailer.SendMailOptions): Promise<void> {
+let oauth2Client: OAuth2Client | null = null;
+
+function getOAuth2Client(): OAuth2Client {
+  if (!GMAIL_OAUTH_CLIENT_ID || !GMAIL_OAUTH_CLIENT_SECRET || !GMAIL_OAUTH_REFRESH_TOKEN) {
+    throw new EmailDeliveryError('Faltan credenciales OAuth de Gmail en el servidor.');
+  }
+  if (!oauth2Client) {
+    oauth2Client = new OAuth2Client(GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET);
+    oauth2Client.setCredentials({ refresh_token: GMAIL_OAUTH_REFRESH_TOKEN });
+  }
+  return oauth2Client;
+}
+
+async function getGmailAccessToken(): Promise<string> {
+  try {
+    const client = getOAuth2Client();
+    const { token } = await client.getAccessToken();
+    if (!token) {
+      throw new EmailDeliveryError(
+        'No se pudo renovar el token OAuth de Gmail. Regenerá GMAIL_OAUTH_REFRESH_TOKEN con npm run gmail-oauth-token (cuenta noreply@).',
+      );
+    }
+    return token;
+  } catch (err) {
+    if (err instanceof EmailDeliveryError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new EmailDeliveryError(
+      `OAuth Gmail rechazado (${msg}). Verificá que el refresh token sea de noreply@intercambius.com.ar y que esté en Vercel.`,
+      err,
+    );
+  }
+}
+
+async function createTransporter(): Promise<nodemailer.Transporter> {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
+  if (usesGmailOAuth()) {
+    const accessToken = await getGmailAccessToken();
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        type: 'OAuth2',
+        user: SMTP_USER,
+        clientId: GMAIL_OAUTH_CLIENT_ID,
+        clientSecret: GMAIL_OAUTH_CLIENT_SECRET,
+        refreshToken: GMAIL_OAUTH_REFRESH_TOKEN,
+        accessToken,
+      },
+    });
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+  });
+}
+
+function assertMailConfigured(): void {
   if (!isMailConfigured()) {
-    console.log('[EMAIL] Sin SMTP configurado (OAuth2 o SMTP_PASS), no se envía:', mailOptions.to, mailOptions.subject);
+    throw new EmailDeliveryError(
+      'Correo no configurado en el servidor (SMTP_USER + OAuth o SMTP_PASS). Contactá soporte.',
+    );
+  }
+}
+
+/** Envío obligatorio: falla en voz alta si no hay SMTP o el proveedor rechaza el mail. */
+async function sendRequired(mailOptions: nodemailer.SendMailOptions): Promise<void> {
+  assertMailConfigured();
+  try {
+    const transporter = await createTransporter();
+    await transporter.sendMail(mailOptions);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[EMAIL] Error enviando:', mailOptions.subject, msg);
+    if (err instanceof EmailDeliveryError) throw err;
+    throw new EmailDeliveryError(
+      msg.includes('535') || msg.includes('BadCredentials')
+        ? 'Gmail rechazó las credenciales OAuth. Regenerá el token con noreply@intercambius.com.ar.'
+        : `No se pudo enviar el correo: ${msg}`,
+      err,
+    );
+  }
+}
+
+/** Envío best-effort (bienvenida, notificaciones). */
+function sendOptional(mailOptions: nodemailer.SendMailOptions): Promise<void> {
+  if (!isMailConfigured()) {
+    console.warn('[EMAIL] Sin SMTP configurado, omitiendo:', mailOptions.subject, '→', mailOptions.to);
     return Promise.resolve();
   }
-  return transporter
-    .sendMail(mailOptions)
-    .then(() => {})
-    .catch((err) => {
-      console.error('[EMAIL] Error enviando:', mailOptions.subject, err.message);
-      if (process.env.NODE_ENV === 'production') throw err;
-    });
+  return sendRequired(mailOptions).catch((err) => {
+    console.error('[EMAIL] Error enviando (no crítico):', mailOptions.subject, err instanceof Error ? err.message : err);
+  });
 }
 
 function escapeHtml(s: string): string {
@@ -135,7 +193,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0; font-size: 28px; letter-spacing: 10px; font-weight: 700; color: #b8860b;">${code}</p>
       <p style="margin: 0; color: #666666; font-size: 14px;">Válido por 10 minutos. No lo compartas con nadie.</p>
     `;
-    await safeSend({
+    await sendRequired({
       from: FROM,
       to,
       subject: `Tu código de verificación — ${APP_NAME}`,
@@ -151,7 +209,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0;"><a href="${resetLink}" style="${btnStyle}">Restablecer contraseña</a></p>
       <p style="margin: 0; color: #666666; font-size: 14px;">El enlace expira en ${expiresMinutes} minutos. Si no solicitaste esto, ignorá este correo.</p>
     `;
-    await safeSend({
+    await sendRequired({
       from: FROM,
       to,
       subject: `Restablecer contraseña — ${APP_NAME}`,
@@ -167,7 +225,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0;"><a href="${FRONTEND_URL}/market" style="${btnStyle}">Ver el market</a></p>
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no creaste esta cuenta, podés ignorar este mensaje.</p>
     `;
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject: `Bienvenido a ${APP_NAME}`,
@@ -182,7 +240,7 @@ export const emailService = {
       <p style="margin: 0 0 20px 0;">Se inició sesión en tu cuenta correctamente. Si fuiste vos, no tenés que hacer nada.</p>
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no fuiste vos, te recomendamos cambiar tu contraseña desde tu perfil.</p>
     `;
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject: `Inicio de sesión en ${APP_NAME}`,
@@ -199,7 +257,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0; color: #b8860b; font-weight: 600;">${precio} IX</p>
       <p style="margin: 0 0 24px 0;"><a href="${FRONTEND_URL}/chat" style="${btnStyle}">Ir al chat para coordinar</a></p>
     `;
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject: `Compra confirmada: ${tituloProducto} — ${APP_NAME}`,
@@ -216,7 +274,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0; color: #b8860b; font-weight: 600;">${precio} IX</p>
       <p style="margin: 0 0 24px 0;"><a href="${FRONTEND_URL}/chat" style="${btnStyle}">Ir al chat para coordinar</a></p>
     `;
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject: `Venta: ${tituloProducto} — ${APP_NAME}`,
@@ -234,7 +292,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0;"><a href="${chatLink}" style="${btnStyle}">Ver conversación</a></p>
     `;
     const textPreview = contenidoPreview.replace(/<[^>]*>/g, '').slice(0, 120);
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject: `${nombreRemitente} te escribió — ${APP_NAME}`,
@@ -243,7 +301,6 @@ export const emailService = {
     });
   },
 
-  /** Mensaje desde el formulario web (quejas / sugerencias). Incluye adjuntos opcionales. */
   async sendContactInquiry(params: {
     inboxTo: string;
     replyTo: string;
@@ -274,7 +331,7 @@ export const emailService = {
       <div style="background: #f8f8f8; padding: 16px; border-radius: 8px; border-left: 4px solid #b8860b; white-space: pre-wrap;">${escapeHtml(mensaje)}</div>
       ${attachments?.length ? `<p style="margin: 16px 0 0 0; font-size: 13px; color: #666;">Adjuntos: ${attachments.length} archivo(s).</p>` : ''}
     `;
-    await safeSend({
+    await sendRequired({
       from: FROM,
       to: inboxTo,
       replyTo,
@@ -289,13 +346,11 @@ export const emailService = {
     });
   },
 
-  /** Código de verificación para registrar intercambio (quien aprobó envía al otro vía plataforma). */
   async sendIntercambioVerificationCode(params: {
     to: string;
     nombreDestinatario: string;
     nombreQuienAprueba: string;
     codigo: string;
-    /** Ej. monto IOX o resumen del acuerdo (opcional). */
     acuerdoResumen?: string;
   }): Promise<void> {
     const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen } = params;
@@ -313,7 +368,7 @@ export const emailService = {
       <p style="margin: 0 0 20px 0;"><a href="${registroUrl}" style="${btnStyle}">Ir a registrar intercambio</a></p>
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no reconocés este intercambio, ignorá este correo.</p>
     `;
-    await safeSend({
+    await sendRequired({
       from: FROM,
       to,
       subject: `Código de verificación — ${APP_NAME}`,
@@ -328,7 +383,7 @@ export const emailService = {
       <div style="margin: 0 0 24px 0;">${bodyHtml}</div>
       <p style="margin: 0; color: #666666; font-size: 14px;">— El equipo de ${APP_NAME}</p>
     `;
-    await safeSend({
+    await sendOptional({
       from: FROM,
       to,
       subject,
@@ -337,3 +392,5 @@ export const emailService = {
     });
   },
 };
+
+export { NOREPLY_EMAIL };

@@ -7,6 +7,7 @@ import { RequestPasswordResetUseCase } from '../../application/use-cases/auth/Re
 import { ResetPasswordUseCase } from '../../application/use-cases/auth/ResetPasswordUseCase.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import prisma from '../../infrastructure/database/prisma.js';
+import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
 
 const userRepository = new UserRepository();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -28,6 +29,12 @@ export class AuthController {
       const result = await loginUseCase.execute({ email, password });
       res.json(result);
     } catch (error: any) {
+      if (isEmailDeliveryError(error)) {
+        return res.status(503).json({
+          error:
+            'No pudimos enviar el código de verificación por email. Intentá de nuevo en unos minutos o escribinos a noreply@intercambius.com.ar.',
+        });
+      }
       const status = error.message === 'Usuario suspendido' ? 403 : 401;
       res.status(status).json({ error: error.message });
     }
