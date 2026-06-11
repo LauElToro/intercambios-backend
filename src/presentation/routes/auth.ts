@@ -7,6 +7,7 @@ authRouter.post('/login', AuthController.login);
 authRouter.post('/refresh', AuthController.refresh);
 authRouter.post('/admin-login', AuthController.adminLogin);
 authRouter.post('/verify-mfa', AuthController.verifyMfa);
+authRouter.post('/resend-mfa', AuthController.resendMfa);
 authRouter.post('/forgot-password', AuthController.requestPasswordReset);
 authRouter.post('/reset-password', AuthController.resetPassword);
 authRouter.post('/register', AuthController.register);

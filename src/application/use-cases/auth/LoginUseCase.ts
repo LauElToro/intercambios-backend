@@ -11,7 +11,12 @@ export class LoginUseCase {
     this.sendMfaUseCase = new SendMfaAndRequireVerificationUseCase(userRepository);
   }
 
-  async execute(credentials: LoginCredentials): Promise<{ mfaRequired: true; mfaToken: string; mfaSentTo: string }> {
+  async execute(credentials: LoginCredentials): Promise<{
+    mfaRequired: true;
+    mfaToken: string;
+    mfaSentTo: string;
+    mfaResendAvailableAt: string;
+  }> {
     const emailInput = normalizeEmail(credentials.email);
     const result = await this.userRepository.getUserWithPassword(emailInput);
 
@@ -28,7 +33,7 @@ export class LoginUseCase {
     }
 
     const email = normalizeEmail(user.email || emailInput);
-    const { mfaToken, sentTo } = await this.sendMfaUseCase.execute(user.id, email);
-    return { mfaRequired: true, mfaToken, mfaSentTo: sentTo };
+    const { mfaToken, sentTo, mfaResendAvailableAt } = await this.sendMfaUseCase.execute(user.id, email);
+    return { mfaRequired: true, mfaToken, mfaSentTo: sentTo, mfaResendAvailableAt };
   }
 }

@@ -3,11 +3,13 @@ import jwt from 'jsonwebtoken';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
 import { normalizeEmail } from '../../../utils/normalizeEmail.js';
+import {
+  MFA_CODE_EXPIRY_MINUTES,
+  MFA_TEMP_TOKEN_EXPIRY,
+  mfaResendAvailableAt,
+} from './mfa.constants.js';
 
-const MFA_CODE_EXPIRY_MINUTES = 10;
-const MFA_TEMP_TOKEN_EXPIRY = '15m';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
 function generateSixDigitCode(): string {
   const n = Math.floor(100000 + Math.random() * 900000);
   return String(n);
@@ -20,22 +22,30 @@ function maskEmail(email: string): string {
 export class SendMfaAndRequireVerificationUseCase {
   constructor(private userRepository: IUserRepository) {}
 
-  async execute(userId: number, email: string): Promise<{ mfaToken: string; sentTo: string }> {
+  async execute(userId: number, email: string): Promise<{
+    mfaToken: string;
+    sentTo: string;
+    mfaResendAvailableAt: string;
+  }> {
     const normalizedEmail = normalizeEmail(email);
     const code = generateSixDigitCode();
     const hashedCode = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + MFA_CODE_EXPIRY_MINUTES * 60 * 1000);
+    const sentAt = Date.now();
 
     await this.userRepository.setMfaCode(userId, hashedCode, expiresAt);
     console.log(`[MFA] Código generado para userId=${userId}, destino=${maskEmail(normalizedEmail)}`);
     await emailService.sendMfaCode(normalizedEmail, code);
 
     const mfaToken = jwt.sign(
-      { userId, email: normalizedEmail, purpose: 'mfa' },
+      { userId, email: normalizedEmail, purpose: 'mfa', sentAt },
       JWT_SECRET,
       { expiresIn: MFA_TEMP_TOKEN_EXPIRY }
     );
 
-    return { mfaToken, sentTo: normalizedEmail };
-  }
-}
+    return {
+      mfaToken,
+      sentTo: normalizedEmail,
+      mfaResendAvailableAt: mfaResendAvailableAt(sentAt),
+    };
+  }}

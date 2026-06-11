@@ -5,6 +5,8 @@ import { RegisterUseCase } from '../../application/use-cases/auth/RegisterUseCas
 import { VerifyMfaUseCase } from '../../application/use-cases/auth/VerifyMfaUseCase.js';
 import { RequestPasswordResetUseCase } from '../../application/use-cases/auth/RequestPasswordResetUseCase.js';
 import { ResetPasswordUseCase } from '../../application/use-cases/auth/ResetPasswordUseCase.js';
+import { ResendMfaUseCase } from '../../application/use-cases/auth/ResendMfaUseCase.js';
+import { MfaResendCooldownError } from '../../application/use-cases/auth/mfa.errors.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
@@ -16,6 +18,7 @@ const registerUseCase = new RegisterUseCase(userRepository);
 const verifyMfaUseCase = new VerifyMfaUseCase(userRepository);
 const requestPasswordResetUseCase = new RequestPasswordResetUseCase(userRepository);
 const resetPasswordUseCase = new ResetPasswordUseCase(userRepository);
+const resendMfaUseCase = new ResendMfaUseCase(userRepository);
 
 export class AuthController {
   static async login(req: Request, res: Response) {
@@ -49,6 +52,32 @@ export class AuthController {
       const result = await verifyMfaUseCase.execute(mfaToken, String(code).trim());
       res.json(result);
     } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async resendMfa(req: Request, res: Response) {
+    try {
+      const { mfaToken } = req.body;
+      if (!mfaToken) {
+        return res.status(400).json({ error: 'Token de verificación requerido' });
+      }
+      const result = await resendMfaUseCase.execute(mfaToken);
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof MfaResendCooldownError) {
+        return res.status(429).json({
+          error: error.message,
+          retryAfterSeconds: error.retryAfterSeconds,
+          mfaResendAvailableAt: error.mfaResendAvailableAt,
+        });
+      }
+      if (isEmailDeliveryError(error)) {
+        return res.status(503).json({
+          error:
+            'No pudimos reenviar el código por email. Intentá de nuevo en unos minutos o escribinos a noreply@intercambius.com.ar.',
+        });
+      }
       res.status(400).json({ error: error.message });
     }
   }
