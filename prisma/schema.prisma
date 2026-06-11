@@ -274,7 +274,6 @@ model Intercambio {
   @@index([otraPersonaId])
   @@index([estado])
   @@index([fecha])
-  @@index([externalId])
   @@index([marketItemId])
 }
 
