@@ -4,6 +4,11 @@ import {
   isGoogleGeocodeConfigured,
   reverseGeocode,
 } from '../../infrastructure/services/google-geocode.service.js';
+import {
+  autocompletePlaces,
+  getPlaceById,
+  isGooglePlacesNewConfigured,
+} from '../../infrastructure/services/google-places-new.service.js';
 import { isValidCoord } from '../../infrastructure/utils/geo.js';
 
 export class GeoController {
@@ -43,6 +48,41 @@ export class GeoController {
       res.json(result);
     } catch {
       res.status(500).json({ error: 'Error en reverse geocoding' });
+    }
+  }
+
+  static async autocomplete(req: Request, res: Response) {
+    try {
+      if (!isGooglePlacesNewConfigured()) {
+        return res.status(503).json({ error: 'Places API no configurada (GOOGLE_MAPS_API_KEY)' });
+      }
+      const input = String(req.query.input || req.query.q || '').trim();
+      if (input.length < 2) {
+        return res.json([]);
+      }
+      const suggestions = await autocompletePlaces(input);
+      res.json(suggestions);
+    } catch {
+      res.status(500).json({ error: 'Error en autocomplete' });
+    }
+  }
+
+  static async place(req: Request, res: Response) {
+    try {
+      if (!isGooglePlacesNewConfigured()) {
+        return res.status(503).json({ error: 'Places API no configurada (GOOGLE_MAPS_API_KEY)' });
+      }
+      const placeId = String(req.query.placeId || req.params.placeId || '').trim();
+      if (!placeId) {
+        return res.status(400).json({ error: 'placeId requerido' });
+      }
+      const result = await getPlaceById(placeId);
+      if (!result) {
+        return res.status(404).json({ error: 'No se encontró el lugar' });
+      }
+      res.json(result);
+    } catch {
+      res.status(500).json({ error: 'Error al obtener lugar' });
     }
   }
 }

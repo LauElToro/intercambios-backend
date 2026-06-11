@@ -25,6 +25,8 @@ model User {
   nombre        String
   email         String    @unique
   password      String
+  // Google Sign-In (sub del id_token). Cuentas solo-Google usan password aleatorio.
+  googleId      String?   @unique
   contacto      String
   saldo         Int       @default(0)  // Positivo: infinito. Negativo: hasta -limite
   limite        Int       @default(50000)  // Límite de saldo negativo (crédito en rojo)
@@ -74,6 +76,7 @@ model User {
   notificaciones            Notificacion[]
 
   @@index([email])
+  @@index([googleId])
   @@index([ubicacion])
   @@index([referralCode])
   @@index([referralSlug])

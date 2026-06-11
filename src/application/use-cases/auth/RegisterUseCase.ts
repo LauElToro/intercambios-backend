@@ -5,13 +5,19 @@ import { RegisterData } from '../../../domain/entities/Auth.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
 import prisma from '../../../infrastructure/database/prisma.js';
 import { normalizeEmail } from '../../../utils/normalizeEmail.js';
+import { verifyRecaptchaToken } from '../../../infrastructure/services/recaptcha.service.js';
 
 export class RegisterUseCase {
   constructor(private userRepository: IUserRepository) {}
 
-  async execute(data: RegisterData): Promise<User> {
+  async execute(data: RegisterData & { recaptchaToken?: string }): Promise<User> {
     if (!data.aceptaTerminos) {
       throw new Error('Debés aceptar los términos y condiciones para registrarte');
+    }
+
+    const recaptchaOk = await verifyRecaptchaToken(data.recaptchaToken);
+    if (!recaptchaOk) {
+      throw new Error('Verificación reCAPTCHA inválida. Intentá de nuevo.');
     }
 
     const email = normalizeEmail(data.email);

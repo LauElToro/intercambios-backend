@@ -49,6 +49,25 @@ export class UserRepository implements IUserRepository {
     return mapToUser(userData);
   }
 
+  async findByGoogleId(googleId: string): Promise<User | null> {
+    const userData = await prisma.user.findUnique({
+      where: { googleId },
+      include: { perfilMercado: true },
+    });
+    if (!userData) return null;
+    return mapToUser(userData);
+  }
+
+  async linkGoogleAccount(userId: number, googleId: string, fotoPerfil?: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleId,
+        ...(fotoPerfil && !fotoPerfil.includes('undefined') ? { fotoPerfil } : {}),
+      },
+    });
+  }
+
   async findAll(): Promise<User[]> {
     const usersData = await prisma.user.findMany({
       include: { perfilMercado: true },
@@ -56,7 +75,7 @@ export class UserRepository implements IUserRepository {
     return usersData.map((userData) => mapToUser(userData));
   }
 
-  async save(user: User, password?: string): Promise<User> {
+  async save(user: User, password?: string, options?: { googleId?: string; fotoPerfil?: string }): Promise<User> {
     const userData = await prisma.user.create({
       data: {
         nombre: user.nombre,
@@ -65,6 +84,8 @@ export class UserRepository implements IUserRepository {
         limite: user.limite,
         email: normalizeEmail(user.email || ''),
         password: password || '',
+        googleId: options?.googleId ?? null,
+        fotoPerfil: options?.fotoPerfil ?? user.fotoPerfil ?? null,
         rating: user.rating,
         totalResenas: user.totalResenas || 0,
         ubicacion: user.ubicacion || 'CABA',

@@ -18,4 +18,6 @@ export interface RegisterData {
   aceptaTerminos: boolean;
   /** Código o slug del referente (opcional). */
   codigoReferido?: string;
+  /** Token reCAPTCHA (registro email/contraseña). */
+  recaptchaToken?: string;
 }

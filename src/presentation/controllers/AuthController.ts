@@ -9,6 +9,8 @@ import { ResendMfaUseCase } from '../../application/use-cases/auth/ResendMfaUseC
 import { MfaResendCooldownError } from '../../application/use-cases/auth/mfa.errors.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import prisma from '../../infrastructure/database/prisma.js';
+import { GoogleAuthUseCase, GoogleAuthAccountNotFoundError } from '../../application/use-cases/auth/GoogleAuthUseCase.js';
+import { isGoogleOAuthConfigured } from '../../infrastructure/services/google-id-token.service.js';
 import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
 
 const userRepository = new UserRepository();
@@ -19,6 +21,7 @@ const verifyMfaUseCase = new VerifyMfaUseCase(userRepository);
 const requestPasswordResetUseCase = new RequestPasswordResetUseCase(userRepository);
 const resetPasswordUseCase = new ResetPasswordUseCase(userRepository);
 const resendMfaUseCase = new ResendMfaUseCase(userRepository);
+const googleAuthUseCase = new GoogleAuthUseCase(userRepository);
 
 export class AuthController {
   static async login(req: Request, res: Response) {
@@ -143,7 +146,7 @@ export class AuthController {
 
   static async register(req: Request, res: Response) {
     try {
-      const { nombre, email, password, contacto, ubicacion, codigoReferido, aceptaTerminos } = req.body;
+      const { nombre, email, password, contacto, ubicacion, codigoReferido, aceptaTerminos, recaptchaToken } = req.body;
       
       if (!nombre || !email || !password || !contacto) {
         return res.status(400).json({ error: 'Faltan campos requeridos: nombre, email, password, contacto' });
@@ -153,7 +156,6 @@ export class AuthController {
         return res.status(400).json({ error: 'Debés aceptar los términos y condiciones para registrarte' });
       }
 
-      // El caso de uso hashea la contraseña una sola vez; no hashear aquí
       const user = await registerUseCase.execute({
         nombre,
         email,
@@ -162,13 +164,46 @@ export class AuthController {
         ubicacion,
         aceptaTerminos: true,
         codigoReferido: typeof codigoReferido === 'string' ? codigoReferido : undefined,
+        recaptchaToken: typeof recaptchaToken === 'string' ? recaptchaToken : undefined,
       });
 
-      // No devolver password
       const { password: _, ...userWithoutPassword } = user as any;
       res.status(201).json(userWithoutPassword);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async googleAuth(req: Request, res: Response) {
+    try {
+      if (!isGoogleOAuthConfigured()) {
+        return res.status(503).json({ error: 'Google Sign-In no configurado en el servidor' });
+      }
+
+      const { credential, mode, aceptaTerminos, codigoReferido, ubicacion, contacto } = req.body;
+      if (!credential || typeof credential !== 'string') {
+        return res.status(400).json({ error: 'Token de Google requerido' });
+      }
+      if (mode !== 'login' && mode !== 'register') {
+        return res.status(400).json({ error: 'mode debe ser login o register' });
+      }
+
+      const result = await googleAuthUseCase.execute({
+        credential,
+        mode,
+        aceptaTerminos: aceptaTerminos === true,
+        codigoReferido: typeof codigoReferido === 'string' ? codigoReferido : undefined,
+        ubicacion: typeof ubicacion === 'string' ? ubicacion : undefined,
+        contacto: typeof contacto === 'string' ? contacto : undefined,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      if (error instanceof GoogleAuthAccountNotFoundError) {
+        return res.status(404).json({ error: error.message, code: 'GOOGLE_ACCOUNT_NOT_FOUND' });
+      }
+      const status = error.message === 'Usuario suspendido' ? 403 : 400;
+      res.status(status).json({ error: error.message });
     }
   }
 
