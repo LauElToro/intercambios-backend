@@ -2,7 +2,7 @@
  * Verifica OAuth Gmail (refresh token + access token) sin enviar correo.
  * Uso: npm run email:verify-oauth
  */
-import 'dotenv/config';
+import '../src/infrastructure/config/load-env.js';
 import { OAuth2Client } from 'google-auth-library';
 
 const clientId = process.env.GMAIL_OAUTH_CLIENT_ID?.trim();
@@ -17,6 +17,10 @@ async function main() {
   }
 
   console.log('SMTP_USER (.env):', smtpUser || '(vacío)');
+  const winSmtp = process.env.SMTP_USER;
+  if (smtpUser && winSmtp && smtpUser !== winSmtp) {
+    console.warn('⚠ SMTP_USER del sistema difiere del .env — load-env debería haber aplicado override.');
+  }
   console.log('Tip: SMTP_USER debe ser la misma cuenta con la que autorizás OAuth (noreply@intercambius.com.ar).\n');
 
   const client = new OAuth2Client(clientId, clientSecret);

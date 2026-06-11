@@ -11,7 +11,7 @@
  * Uso (desde backend/): npm run gmail-oauth-token
  * Autorizá con la misma cuenta que SMTP_USER (noreply@intercambius.com.ar).
  */
-import 'dotenv/config';
+import '../src/infrastructure/config/load-env.js';
 import http from 'node:http';
 import { URL } from 'node:url';
 import { OAuth2Client } from 'google-auth-library';

@@ -5,7 +5,7 @@
  *   npm run email:test-all
  *   npm run email:test-all -- lautaro.figueroa@libertyclub.io
  */
-import 'dotenv/config';
+import '../src/infrastructure/config/load-env.js';
 
 process.env.NODE_ENV = 'production';
 

@@ -1,5 +1,5 @@
+import '../src/infrastructure/config/load-env.js';
 import express, { Request, Response, NextFunction } from 'express';
-import dotenv from 'dotenv';
 import { applyCorsHeadersIfAllowed, corsMiddleware, handleOptionsPreflight } from '../src/config/cors.js';
 import { usersRouter } from '../src/presentation/routes/users.js';
 import { marketRouter } from '../src/presentation/routes/market.js';
@@ -21,9 +21,6 @@ import { webhooksRouter } from '../src/presentation/routes/webhooks.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
-
-// Cargar variables de entorno
-dotenv.config();
 
 const app = express();
 

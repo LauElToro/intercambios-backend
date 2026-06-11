@@ -1,5 +1,5 @@
+import '../infrastructure/config/load-env.js';
 import express from 'express';
-import dotenv from 'dotenv';
 import { corsMiddleware, handleOptionsPreflight } from '../config/cors.js';
 import { usersRouter } from '../presentation/routes/users.js';
 import { marketRouter } from '../presentation/routes/market.js';
@@ -19,8 +19,6 @@ import { geoRouter } from '../presentation/routes/geo.js';
 import { kycRouter } from '../presentation/routes/kyc.js';
 import { webhooksRouter } from '../presentation/routes/webhooks.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
