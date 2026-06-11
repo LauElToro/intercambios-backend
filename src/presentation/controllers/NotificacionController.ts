@@ -60,4 +60,25 @@ export class NotificacionController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  static async eliminar(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      const id = parseInt(req.params.id, 10);
+      if (!userId) return res.status(401).json({ error: 'No autorizado' });
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+
+      const result = await prisma.notificacion.deleteMany({
+        where: { id, userId },
+      });
+
+      if (result.count === 0) {
+        return res.status(404).json({ error: 'Notificación no encontrada' });
+      }
+
+      res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }

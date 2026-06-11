@@ -4,6 +4,7 @@ import { MarketItemRepository } from '../../infrastructure/repositories/MarketIt
 import { MarketItem } from '../../domain/entities/MarketItem.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
+import { haversineDistanceKm, getValidCoords, roundDistanceKm } from '../../infrastructure/utils/geo.js';
 
 const marketItemRepository = new MarketItemRepository();
 const getMarketItemsUseCase = new GetMarketItemsUseCase(marketItemRepository);
@@ -15,10 +16,12 @@ export class MarketController {
       const userLng = req.query.userLng != null ? Number(req.query.userLng) : undefined;
       const distanciaMax = req.query.distanciaMax != null ? Number(req.query.distanciaMax) : undefined;
 
-      // Validar coordenadas para filtro de distancia (evitar NaN)
-      const hasValidLocation = typeof userLat === 'number' && !isNaN(userLat) &&
-        typeof userLng === 'number' && !isNaN(userLng) &&
-        typeof distanciaMax === 'number' && !isNaN(distanciaMax) && distanciaMax > 0;
+      const hasUserCoords = getValidCoords(userLat, userLng);
+      const hasValidDistanceFilter =
+        hasUserCoords &&
+        typeof distanciaMax === 'number' &&
+        !Number.isNaN(distanciaMax) &&
+        distanciaMax > 0;
 
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 24));
@@ -38,9 +41,9 @@ export class MarketController {
         precioMax: req.query.precioMax ? Number(req.query.precioMax) : undefined,
         vendedorId: req.query.vendedorId ? Number(req.query.vendedorId) : undefined,
         search,
-        userLat: hasValidLocation ? userLat : undefined,
-        userLng: hasValidLocation ? userLng : undefined,
-        distanciaMax: hasValidLocation ? distanciaMax : undefined,
+        userLat: hasUserCoords?.lat,
+        userLng: hasUserCoords?.lng,
+        distanciaMax: hasValidDistanceFilter ? distanciaMax : undefined,
         page,
         limit,
         soloDisponibles: req.query.vendedorId ? false : soloDisponibles,
@@ -70,8 +73,20 @@ export class MarketController {
         select: { id: true, nombre: true, contacto: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true, kycVerificado: true },
       });
 
+      const userLat = req.query.userLat != null ? Number(req.query.userLat) : undefined;
+      const userLng = req.query.userLng != null ? Number(req.query.userLng) : undefined;
+
+      const userCoords = getValidCoords(userLat, userLng);
+
+      const itemJson = item.toJSON() as Record<string, unknown>;
+      if (userCoords && item.lat != null && item.lng != null) {
+        itemJson.distancia = roundDistanceKm(
+          haversineDistanceKm(userCoords.lat, userCoords.lng, item.lat, item.lng),
+        );
+      }
+
       res.json({
-        ...item.toJSON(),
+        ...itemJson,
         vendedor: user ? {
           id: user.id,
           nombre: user.nombre,

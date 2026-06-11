@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
 
 function trimEnv(v: string | undefined): string | undefined {
   if (v == null) return undefined;
@@ -63,7 +64,7 @@ export function isEmailDeliveryConfigured(): boolean {
   return isMailConfigured();
 }
 
-const FROM = process.env.SMTP_FROM || SMTP_USER || '"Intercambius" <Intercambius.info@gmail.com>';
+const FROM = process.env.SMTP_FROM || SMTP_USER || DEFAULT_SMTP_FROM;
 const APP_NAME = 'Intercambius';
 
 function safeSend(mailOptions: nodemailer.SendMailOptions): Promise<void> {

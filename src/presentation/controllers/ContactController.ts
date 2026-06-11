@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
+import { NOREPLY_EMAIL } from '../../infrastructure/config/email.constants.js';
 import { emailService } from '../../infrastructure/services/email.service.js';
 
 const MAX_FILES = 5;
@@ -69,14 +70,14 @@ export class ContactController {
       if (!process.env.SMTP_USER) {
         return res.status(503).json({
           error:
-            'El envío de correo no está configurado en el servidor. Escribinos a Intercambius.info@gmail.com manualmente.',
+            `El envío de correo no está configurado en el servidor. Escribinos a ${NOREPLY_EMAIL} manualmente.`,
         });
       }
 
       const inboxTo =
         process.env.CONTACT_INBOX_EMAIL?.trim() ||
         process.env.SMTP_USER?.trim() ||
-        'Intercambius.info@gmail.com';
+        NOREPLY_EMAIL;
 
       await emailService.sendContactInquiry({
         inboxTo,

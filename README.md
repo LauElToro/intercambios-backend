@@ -272,22 +272,29 @@ Descuenta el precio del item del saldo del comprador y acredita al vendedor. Cre
 | `FRONTEND_URL` | Origen permitido para CORS | ❌ | * |
 | `PORT` | Puerto (solo local) | ❌ | 3001 |
 | `NODE_ENV` | development / production | ❌ | development |
-| `SMTP_USER` | Cuenta Gmail que envía (ej. `Intercambius.info@gmail.com`) | ❌* | - |
-| `SMTP_PASS` | Contraseña de aplicación de Google (no la contraseña de la cuenta) | ❌* | - |
-| `SMTP_FROM` | Remitente mostrado | ❌ | `SMTP_USER` o `Intercambius <Intercambius.info@gmail.com>` |
+| `SMTP_USER` | `noreply@intercambius.com.ar` | ❌* | - |
+| `SMTP_FROM` | Remitente mostrado | ❌ | `noreply@intercambius.com.ar` |
+| `CONTACT_INBOX_EMAIL` | Destino del formulario de contacto | ❌ | `noreply@intercambius.com.ar` |
+| `GMAIL_OAUTH_CLIENT_ID` / `SECRET` / `REFRESH_TOKEN` | OAuth2 para SMTP (requerido) | ❌* | - |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` | Servidor SMTP | ❌ | Gmail 587 |
 
-\* **Sin `SMTP_USER` no se envía ningún correo** (MFA, bienvenida, recuperación, compras, etc.); solo se loguea en consola.
+\* **Sin `SMTP_USER` + OAuth completo no se envía correo**; solo se loguea en consola.
 
-### Correo con Intercambius.info@gmail.com (Gmail)
+### Correo con Google Workspace (@intercambius.com.ar)
 
-1. Iniciá sesión en la cuenta **Intercambius.info@gmail.com**.
-2. Activá **verificación en 2 pasos** en la cuenta de Google.
-3. Creá una **contraseña de aplicación**: [Seguridad de Google → Contraseñas de aplicaciones](https://myaccount.google.com/apppasswords).
-4. En **local**: copiá `backend/.env.example` a `.env` y completá `SMTP_USER` y `SMTP_PASS` (la contraseña de 16 caracteres de Google).
-5. En **Vercel** (u otro host): Project Settings → Environment Variables → mismas claves (`SMTP_USER`, `SMTP_PASS`, opcional `SMTP_FROM`).
+Guía operativa: **`docs/GMAIL-WORKSPACE-ENROUTAMIENTO.md`**
 
-El remitente efectivo lo arma `email.service.ts`: `SMTP_FROM` → si no, `SMTP_USER` → si no, `"Intercambius" <Intercambius.info@gmail.com>`.
+### Probar todas las plantillas
+
+```bash
+npm run email:test-all -- tu@email.com
+```
+
+1. Crear usuario **`noreply@intercambius.com.ar`** en Workspace (único buzón para todo).
+2. OAuth: `npm run gmail-oauth-token` en `backend/` autorizando esa cuenta.
+3. En **Vercel**: `SMTP_USER`, `SMTP_FROM`, `CONTACT_INBOX_EMAIL` (todos `noreply@`), `GMAIL_OAUTH_*`, `FRONTEND_URL`.
+
+El remitente efectivo lo arma `email.service.ts`: `SMTP_FROM` → si no, `SMTP_USER` → si no, `"Intercambius" <noreply@intercambius.com.ar>`.
 
 ---
 

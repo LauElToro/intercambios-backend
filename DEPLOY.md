@@ -38,7 +38,8 @@ En **Project Settings → Environment Variables** configurar:
 |----------|-------|-----------|
 | `DATABASE_URL` | `postgresql://user:pass@host:5432/db?sslmode=require` | Production, Preview |
 | `JWT_SECRET` | String aleatorio seguro | Production, Preview |
-| `BLOB_READ_WRITE_TOKEN` | Token de Vercel Blob | Production, Preview |
+| `BLOB_READ_WRITE_TOKEN` | Read-Write Token del almacén (Storage → tu Blob store → `.env local` o **Connect to project**). Si Vercel creó otra variable (p. ej. con prefijo), el backend también acepta **una sola** variable cuyo nombre termine en `_BLOB_READ_WRITE_TOKEN`, o podés copiar el valor a `BLOB_READ_WRITE_TOKEN`. | Production, Preview |
+| `BLOB_STORE_ACCESS` | `public` o `private`, debe coincidir con el tipo de almacén. Para URLs directas en el front (imágenes de perfil, market): almacén **público** y `public` (valor por defecto si no definís la variable). | Production, Preview |
 | `FRONTEND_URL` | URL del sitio (enlaces en correos y KYC); **no** configura CORS | Production |
 | `WORKFLOW_DIDIT` | UUID del **workflow** en Didit (Console → Workflows). Legacy: `ID_DIDIT` también se lee si `WORKFLOW_DIDIT` está vacío. | Production |
 | `API_KEY_DIDIT` | API key de verificación (`x-api-key`) | Production |
@@ -174,6 +175,12 @@ Con `SKIP_DB_MIGRATE=1`, el build ejecuta solo `prisma generate`, no `prisma mig
 
 - Aumentar `maxDuration` en `vercel.json` (máx. 60s en plan Hobby, más en Pro)
 - Revisar queries lentas o falta de índices
+
+### Subidas a Vercel Blob (401, “Access denied”, imágenes no se guardan)
+
+1. **Proyecto y almacén**: el token de “.env local” del store es válido para ese store. Tras recrear el almacén o el proyecto, generá un token nuevo y asignalo a `BLOB_READ_WRITE_TOKEN` (o dejá una sola variable `*_BLOB_READ_WRITE_TOKEN` coherente con el store conectado al proyecto).
+2. **Acceso público vs privado**: el SDK exige que `BLOB_STORE_ACCESS` (`public` / `private`) coincida con el tipo de almacén. Para imágenes servidas por URL en el front, el almacén debe ser **público** y `BLOB_STORE_ACCESS=public` (o sin definir; el default es `public`).
+3. **Redeploy** tras cambiar variables de entorno.
 
 ### CORS
 

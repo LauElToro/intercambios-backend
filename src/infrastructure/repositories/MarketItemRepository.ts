@@ -1,22 +1,7 @@
 import { MarketItem } from '../../domain/entities/MarketItem.js';
 import { IMarketItemRepository, MarketItemFilters, PaginatedResult } from '../../domain/repositories/IMarketItemRepository.js';
 import prisma from '../database/prisma.js';
-
-/** Distancia en km entre dos puntos (fórmula de Haversine) */
-function haversineDistanceKm(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number
-): number {
-  const R = 6371; // Radio de la Tierra en km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+import { haversineDistanceKm, getValidCoords, roundDistanceKm } from '../utils/geo.js';
 
 type PrismaItem = {
   id: number;
@@ -92,6 +77,46 @@ function mapToEntity(itemData: PrismaItem): MarketItem {
     images,
     stock: itemData.stock !== undefined ? itemData.stock : null,
   });
+}
+
+function withDistanceFromUser(item: MarketItem, userLat: number, userLng: number): MarketItem {
+  if (item.lat == null || item.lng == null) return item;
+  const dist = roundDistanceKm(haversineDistanceKm(userLat, userLng, item.lat, item.lng));
+  return MarketItem.create({
+    id: item.id,
+    titulo: item.titulo,
+    descripcion: item.descripcion,
+    precio: item.precio,
+    rubro: item.rubro,
+    vendedorId: item.vendedorId,
+    descripcionCompleta: item.descripcionCompleta,
+    ubicacion: item.ubicacion,
+    lat: item.lat,
+    lng: item.lng,
+    distancia: dist,
+    tipoPago: item.tipoPago,
+    imagen: item.imagen,
+    rating: item.rating,
+    detalles: item.detalles,
+    caracteristicas: item.caracteristicas,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    slug: item.slug,
+    status: item.status,
+    condition: item.condition,
+    availability: item.availability,
+    brand: item.brand,
+    metaTitle: item.metaTitle,
+    metaDescription: item.metaDescription,
+    ogImage: item.ogImage,
+    categoryId: item.categoryId,
+    images: item.images,
+    stock: item.stock,
+  });
+}
+
+function applyUserDistance(items: MarketItem[], userLat: number, userLng: number): MarketItem[] {
+  return items.map((item) => withDistanceFromUser(item, userLat, userLng));
 }
 
 function resolveStockForWrite(rubro: string, stock: unknown): number | null {
@@ -174,12 +199,14 @@ export class MarketItemRepository implements IMarketItemRepository {
       where.AND = andParts;
     }
 
-    const userLat = filters?.userLat;
-    const userLng = filters?.userLng;
+    const userCoords = getValidCoords(filters?.userLat, filters?.userLng);
     const maxKm = filters?.distanciaMax;
-    const canFilterByDistance = typeof userLat === 'number' && !isNaN(userLat) &&
-      typeof userLng === 'number' && !isNaN(userLng) &&
-      typeof maxKm === 'number' && !isNaN(maxKm) && maxKm > 0;
+    const hasUserCoords = userCoords != null;
+    const canFilterByDistance =
+      hasUserCoords &&
+      typeof maxKm === 'number' &&
+      !Number.isNaN(maxKm) &&
+      maxKm > 0;
 
     const findManyOptions: { skip?: number; take: number } =
       canFilterByDistance || hasSearch
@@ -212,7 +239,7 @@ export class MarketItemRepository implements IMarketItemRepository {
     if (canFilterByDistance) {
       items = items.filter((item) => {
         if (item.lat == null || item.lng == null) return false;
-        const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
+        const dist = haversineDistanceKm(userCoords!.lat, userCoords!.lng, item.lat, item.lng);
         return dist <= maxKm!;
       });
     }
@@ -222,44 +249,8 @@ export class MarketItemRepository implements IMarketItemRepository {
       const total = items.length;
       const start = (page - 1) * limit;
       items = items.slice(start, start + limit);
-      if (canFilterByDistance) {
-        items = items.map((item) => {
-          if (item.lat != null && item.lng != null) {
-            const dist = haversineDistanceKm(userLat!, userLng!, item.lat, item.lng);
-            return MarketItem.create({
-            id: item.id,
-            titulo: item.titulo,
-            descripcion: item.descripcion,
-            precio: item.precio,
-            rubro: item.rubro,
-            vendedorId: item.vendedorId,
-            descripcionCompleta: item.descripcionCompleta,
-            ubicacion: item.ubicacion,
-            lat: item.lat,
-            lng: item.lng,
-            distancia: Math.round(dist * 10) / 10,
-            tipoPago: item.tipoPago,
-            imagen: item.imagen,
-            rating: item.rating,
-            detalles: item.detalles,
-            caracteristicas: item.caracteristicas,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
-            slug: item.slug,
-            status: item.status,
-            condition: item.condition,
-            availability: item.availability,
-            brand: item.brand,
-            metaTitle: item.metaTitle,
-            metaDescription: item.metaDescription,
-            ogImage: item.ogImage,
-            categoryId: item.categoryId,
-            images: item.images,
-            stock: item.stock,
-          });
-        }
-        return item;
-        });
+      if (hasUserCoords) {
+        items = applyUserDistance(items, userCoords!.lat, userCoords!.lng);
       }
       return {
         data: items,
@@ -268,6 +259,10 @@ export class MarketItemRepository implements IMarketItemRepository {
         limit,
         totalPages: Math.ceil(total / limit) || 1,
       };
+    }
+
+    if (hasUserCoords) {
+      items = applyUserDistance(items, userCoords!.lat, userCoords!.lng);
     }
 
     const total = await prisma.marketItem.count({ where });

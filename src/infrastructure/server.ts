@@ -15,6 +15,7 @@ import { busquedasRouter } from '../presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../presentation/routes/notificaciones.js';
 import { referidosRouter } from '../presentation/routes/referidos.js';
 import { contactRouter } from '../presentation/routes/contact.js';
+import { geoRouter } from '../presentation/routes/geo.js';
 import { kycRouter } from '../presentation/routes/kyc.js';
 import { webhooksRouter } from '../presentation/routes/webhooks.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
@@ -39,6 +40,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/geo', geoRouter);
 app.use('/api/webhooks', webhooksRouter);
 
 // Protected routes

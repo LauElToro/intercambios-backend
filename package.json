@@ -20,8 +20,12 @@
     "db:check-coords": "tsx scripts/check-and-backfill-coords.ts",
     "vercel-build": "node scripts/vercel-build.cjs",
     "gmail-oauth-token": "tsx scripts/gmail-oauth-token.ts",
+    "email:test-all": "tsx scripts/send-all-test-emails.ts",
     "kyc:approve": "tsx scripts/kyc-approve-by-email.ts",
-    "email:codigo-intercambio": "tsx scripts/enviar-codigo-intercambio-manual.ts"
+    "email:codigo-intercambio": "tsx scripts/enviar-codigo-intercambio-manual.ts",
+    "db:reset-creditos": "tsx scripts/reset-usuarios-creditos.ts",
+    "db:clear-intereses": "tsx scripts/clear-intereses-quiero-by-email.ts",
+    "db:clear-intereses-all": "tsx scripts/clear-intereses-quiero-by-email.ts --all"
   },
   "keywords": [
     "intercambius",

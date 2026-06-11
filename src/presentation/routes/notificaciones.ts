@@ -8,4 +8,5 @@ notificacionesRouter.use(authMiddleware);
 
 notificacionesRouter.get('/', NotificacionController.getNotificaciones);
 notificacionesRouter.patch('/leer-todas', NotificacionController.marcarTodasLeidas);
+notificacionesRouter.delete('/:id', NotificacionController.eliminar);
 notificacionesRouter.patch('/:id/leer', NotificacionController.marcarLeida);

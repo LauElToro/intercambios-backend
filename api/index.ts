@@ -15,6 +15,7 @@ import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../src/presentation/routes/notificaciones.js';
 import { referidosRouter } from '../src/presentation/routes/referidos.js';
 import { contactRouter } from '../src/presentation/routes/contact.js';
+import { geoRouter } from '../src/presentation/routes/geo.js';
 import { kycRouter } from '../src/presentation/routes/kyc.js';
 import { webhooksRouter } from '../src/presentation/routes/webhooks.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
@@ -80,6 +81,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
 app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/contact', contactRouter);
+app.use('/api/geo', geoRouter);
 app.use('/api/webhooks', webhooksRouter);
 
 // Perfil público: ver perfiles sin login (id numérico; /me va al router protegido)

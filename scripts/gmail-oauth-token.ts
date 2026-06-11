@@ -1,21 +1,63 @@
 /**
- * Obtiene un refresh token de Google para enviar correo por SMTP con OAuth2 (sin contraseña de aplicación).
+ * Obtiene un refresh token de Google para enviar correo por SMTP con OAuth2.
  *
- * Prerrequisitos:
- * 1. En Google Cloud Console: credenciales OAuth "Aplicación web" o "Escritorio".
- * 2. URI de redirección autorizada: la misma que GMAIL_OAUTH_REDIRECT_URI (default http://127.0.0.1:8787).
- * 3. En .env: GMAIL_OAUTH_CLIENT_ID y GMAIL_OAUTH_CLIENT_SECRET.
+ * Prerrequisitos (Google Cloud Console → Credenciales → tu cliente OAuth):
+ * - Tipo: "Aplicación de escritorio" o "Aplicación web"
+ * - URI de redirección autorizada: http://127.0.0.1:8787
+ *   (misma que GMAIL_OAUTH_REDIRECT_URI; default 8787)
+ * - Gmail API habilitada
+ * - En .env: GMAIL_OAUTH_CLIENT_ID y GMAIL_OAUTH_CLIENT_SECRET
  *
  * Uso (desde backend/): npm run gmail-oauth-token
+ * Autorizá con la misma cuenta que SMTP_USER (noreply@intercambius.com.ar).
  */
 import 'dotenv/config';
-import { createInterface } from 'node:readline/promises';
-import { stdin as input, stdout as output } from 'node:process';
+import http from 'node:http';
+import { URL } from 'node:url';
 import { OAuth2Client } from 'google-auth-library';
 
 const clientId = process.env.GMAIL_OAUTH_CLIENT_ID?.trim();
 const clientSecret = process.env.GMAIL_OAUTH_CLIENT_SECRET?.trim();
 const redirectUri = process.env.GMAIL_OAUTH_REDIRECT_URI?.trim() || 'http://127.0.0.1:8787';
+
+function redirectPort(uri: string): number {
+  const u = new URL(uri);
+  if (u.port) return parseInt(u.port, 10);
+  return u.protocol === 'https:' ? 443 : 80;
+}
+
+function waitForAuthCode(port: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+      const code = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+
+      if (error) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<h1>Error OAuth</h1><p>${error}</p><p>Cerrá esta pestaña.</p>`);
+        server.close();
+        reject(new Error(`OAuth rechazado: ${error}`));
+        return;
+      }
+
+      if (code) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(
+          '<h1>Autorización OK</h1><p>Podés cerrar esta ventana y volver a la terminal.</p>',
+        );
+        server.close();
+        resolve(code);
+        return;
+      }
+
+      res.writeHead(404).end();
+    });
+
+    server.on('error', reject);
+    server.listen(port, '127.0.0.1');
+  });
+}
 
 async function main() {
   if (!clientId || !clientSecret) {
@@ -23,40 +65,45 @@ async function main() {
     process.exit(1);
   }
 
+  const port = redirectPort(redirectUri);
+  const smtpUser = process.env.SMTP_USER?.trim() || 'noreply@intercambius.com.ar';
+
+  console.log('\n--- OAuth Gmail (Intercambius) ---');
+  console.log(`Redirect URI: ${redirectUri}`);
+  console.log(
+    `Si ves "redirect_uri_mismatch", agregá esa URI en Google Cloud → Credenciales → URIs de redirección autorizados.\n`,
+  );
+  console.log(`Iniciá sesión en el navegador con: ${smtpUser}\n`);
+
   const oAuth2Client = new OAuth2Client({ clientId, clientSecret, redirectUri });
-  const url = oAuth2Client.generateAuthUrl({
+  const authUrl = oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: ['https://mail.google.com/'],
   });
 
-  console.log('\n1) Abrí esta URL en el navegador (sesión de la cuenta Gmail que enviará el correo):\n');
-  console.log(url);
-  console.log('\n2) Tras autorizar, copiá el parámetro "code" de la URL de redirección (o el código que muestre Google).\n');
+  const codePromise = waitForAuthCode(port);
 
-  const rl = createInterface({ input, output });
-  const code = (await rl.question('Pegá el código aquí: ')).trim();
-  rl.close();
+  console.log('1) Abrí esta URL en el navegador:\n');
+  console.log(authUrl);
+  console.log('\n2) Esperando callback en el puerto local... (no cierres la terminal)\n');
 
-  if (!code) {
-    console.error('Código vacío.');
-    process.exit(1);
-  }
+  const code = await codePromise;
 
   const { tokens } = await oAuth2Client.getToken(code);
   if (!tokens.refresh_token) {
     console.error(
-      'No llegó refresh_token. Probá revocar acceso a la app en tu cuenta Google y repetir con prompt=consent (ya está en el script), o usá otra cuenta de prueba.',
+      'No llegó refresh_token. Revocá acceso previo en https://myaccount.google.com/permissions y repetí.',
     );
     process.exit(1);
   }
 
   console.log('\nAgregá a backend/.env (y en Vercel):\n');
   console.log(`GMAIL_OAUTH_REFRESH_TOKEN=${tokens.refresh_token}`);
-  console.log('\nSMTP_USER debe ser el mismo email de la cuenta que autorizó.\n');
+  console.log(`\nSMTP_USER debe ser la cuenta que autorizaste (${smtpUser}).\n`);
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 });
