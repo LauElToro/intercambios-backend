@@ -87,6 +87,29 @@ app.get('/api/health/email', async (_req: Request, res: Response) => {
   }
 });
 
+/** Envía MFA de prueba al inbox indicado. Requiere header X-Email-Diag-Key = EMAIL_DIAG_SECRET en Vercel. */
+app.post('/api/health/email/send-test', async (req: Request, res: Response) => {
+  const secret = process.env.EMAIL_DIAG_SECRET?.trim();
+  const key = req.get('X-Email-Diag-Key')?.trim();
+  if (!secret || key !== secret) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const to = String(req.body?.to || '').trim().toLowerCase();
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return res.status(400).json({ error: 'Body.to debe ser un email válido' });
+  }
+  try {
+    const { emailService } = await import('../src/infrastructure/services/email.service.js');
+    await emailService.sendMfaTest(to);
+    res.json({ ok: true, message: `MFA de prueba enviado a ${to}` });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 // Public routes
 app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);

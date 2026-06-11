@@ -21,6 +21,7 @@ export class SendMfaAndRequireVerificationUseCase {
     const expiresAt = new Date(Date.now() + MFA_CODE_EXPIRY_MINUTES * 60 * 1000);
 
     await this.userRepository.setMfaCode(userId, hashedCode, expiresAt);
+    console.log(`[MFA] Código generado para userId=${userId}, destino=${email.replace(/^(.{2}).*(@.*)$/, '$1***$2')}`);
     await emailService.sendMfaCode(email, code);
 
     const mfaToken = jwt.sign(

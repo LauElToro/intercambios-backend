@@ -9,25 +9,47 @@ function trimEnv(v: string | undefined): string | undefined {
   return t || undefined;
 }
 
-const SMTP_USER = trimEnv(process.env.SMTP_USER);
-const SMTP_PASS = trimEnv(process.env.SMTP_PASS);
-const GMAIL_OAUTH_CLIENT_ID = trimEnv(process.env.GMAIL_OAUTH_CLIENT_ID);
-const GMAIL_OAUTH_CLIENT_SECRET = trimEnv(process.env.GMAIL_OAUTH_CLIENT_SECRET);
-const GMAIL_OAUTH_REFRESH_TOKEN = trimEnv(process.env.GMAIL_OAUTH_REFRESH_TOKEN);
+function env(name: string): string | undefined {
+  return trimEnv(process.env[name]);
+}
 
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-const LOGO_URL = process.env.LOGO_URL || `${FRONTEND_URL}/logo-intercambius.png`;
+const FRONTEND_URL = (env('FRONTEND_URL') || 'http://localhost:5173').replace(/\/$/, '');
+const LOGO_URL = env('LOGO_URL') || `${FRONTEND_URL}/logo-intercambius.png`;
+
+function smtpUser(): string | undefined {
+  return env('SMTP_USER');
+}
+
+function smtpPass(): string | undefined {
+  return env('SMTP_PASS');
+}
+
+function gmailOAuthClientId(): string | undefined {
+  return env('GMAIL_OAUTH_CLIENT_ID');
+}
+
+function gmailOAuthClientSecret(): string | undefined {
+  return env('GMAIL_OAUTH_CLIENT_SECRET');
+}
+
+function gmailOAuthRefreshToken(): string | undefined {
+  return env('GMAIL_OAUTH_REFRESH_TOKEN');
+}
 
 function usesGmailOAuth(): boolean {
   return Boolean(
-    SMTP_USER && GMAIL_OAUTH_CLIENT_ID && GMAIL_OAUTH_CLIENT_SECRET && GMAIL_OAUTH_REFRESH_TOKEN,
+    smtpUser() &&
+      gmailOAuthClientId() &&
+      gmailOAuthClientSecret() &&
+      gmailOAuthRefreshToken(),
   );
 }
 
 function isMailConfigured(): boolean {
-  if (!SMTP_USER) return false;
+  const user = smtpUser();
+  if (!user) return false;
   if (usesGmailOAuth()) return true;
-  return Boolean(SMTP_PASS);
+  return Boolean(smtpPass());
 }
 
 /** Expuesto para flujos que requieren envío real (p. ej. código de intercambio). */
@@ -45,11 +67,11 @@ export interface EmailDeliveryStatus {
 
 /** Diagnóstico (p. ej. GET /api/health/email) sin enviar correo. */
 export async function checkEmailDeliveryStatus(): Promise<EmailDeliveryStatus> {
-  const mode = usesGmailOAuth() ? 'oauth' : SMTP_PASS ? 'password' : 'none';
+  const mode = usesGmailOAuth() ? 'oauth' : smtpPass() ? 'password' : 'none';
   const base: EmailDeliveryStatus = {
     configured: isMailConfigured(),
     mode,
-    smtpUser: SMTP_USER ?? null,
+    smtpUser: smtpUser() ?? null,
     oauthTokenOk: null,
     error: null,
   };
@@ -74,18 +96,21 @@ export async function checkEmailDeliveryStatus(): Promise<EmailDeliveryStatus> {
   }
 }
 
-const FROM = process.env.SMTP_FROM || SMTP_USER || DEFAULT_SMTP_FROM;
+const FROM = () => env('SMTP_FROM') || smtpUser() || DEFAULT_SMTP_FROM;
 const APP_NAME = 'Intercambius';
 
 let oauth2Client: OAuth2Client | null = null;
 
 function getOAuth2Client(): OAuth2Client {
-  if (!GMAIL_OAUTH_CLIENT_ID || !GMAIL_OAUTH_CLIENT_SECRET || !GMAIL_OAUTH_REFRESH_TOKEN) {
+  const clientId = gmailOAuthClientId();
+  const clientSecret = gmailOAuthClientSecret();
+  const refreshToken = gmailOAuthRefreshToken();
+  if (!clientId || !clientSecret || !refreshToken) {
     throw new EmailDeliveryError('Faltan credenciales OAuth de Gmail en el servidor.');
   }
   if (!oauth2Client) {
-    oauth2Client = new OAuth2Client(GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET);
-    oauth2Client.setCredentials({ refresh_token: GMAIL_OAUTH_REFRESH_TOKEN });
+    oauth2Client = new OAuth2Client(clientId, clientSecret);
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
   }
   return oauth2Client;
 }
@@ -117,16 +142,17 @@ async function createTransporter(): Promise<nodemailer.Transporter> {
 
   if (usesGmailOAuth()) {
     const accessToken = await getGmailAccessToken();
+    const user = smtpUser();
     return nodemailer.createTransport({
       host,
       port,
       secure,
       auth: {
         type: 'OAuth2',
-        user: SMTP_USER,
-        clientId: GMAIL_OAUTH_CLIENT_ID,
-        clientSecret: GMAIL_OAUTH_CLIENT_SECRET,
-        refreshToken: GMAIL_OAUTH_REFRESH_TOKEN,
+        user,
+        clientId: gmailOAuthClientId(),
+        clientSecret: gmailOAuthClientSecret(),
+        refreshToken: gmailOAuthRefreshToken(),
         accessToken,
       },
     });
@@ -136,7 +162,7 @@ async function createTransporter(): Promise<nodemailer.Transporter> {
     host,
     port,
     secure,
-    auth: SMTP_USER && SMTP_PASS ? { user: SMTP_USER, pass: SMTP_PASS } : undefined,
+    auth: smtpUser() && smtpPass() ? { user: smtpUser(), pass: smtpPass() } : undefined,
   });
 }
 
@@ -226,6 +252,8 @@ const btnStyle = 'display: inline-block; padding: 14px 28px; background-color: #
 
 export const emailService = {
   async sendMfaCode(to: string, code: string): Promise<void> {
+    const masked = to.replace(/^(.{2}).*(@.*)$/, '$1***$2');
+    console.log(`[EMAIL] Enviando MFA a ${masked}`);
     const content = `
       <p style="margin: 0 0 24px 0; font-size: 18px; color: #1a1a1a;">Hola,</p>
       <p style="margin: 0 0 20px 0;">Tu código de verificación para iniciar sesión es:</p>
@@ -233,12 +261,18 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">Válido por 10 minutos. No lo compartas con nadie.</p>
     `;
     await sendRequired({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Tu código de verificación — ${APP_NAME}`,
       html: emailLayout(content),
       text: `Tu código de verificación es: ${code}. Válido por 10 minutos.`,
     });
+    console.log(`[EMAIL] MFA enviado OK a ${masked}`);
+  },
+
+  /** Prueba de entrega real (solo diagnóstico protegido). */
+  async sendMfaTest(to: string): Promise<void> {
+    await this.sendMfaCode(to, '847291');
   },
 
   async sendPasswordResetLink(to: string, resetLink: string, expiresMinutes: number): Promise<void> {
@@ -249,7 +283,7 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">El enlace expira en ${expiresMinutes} minutos. Si no solicitaste esto, ignorá este correo.</p>
     `;
     await sendRequired({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Restablecer contraseña — ${APP_NAME}`,
       html: emailLayout(content),
@@ -265,7 +299,7 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no creaste esta cuenta, podés ignorar este mensaje.</p>
     `;
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Bienvenido a ${APP_NAME}`,
       html: emailLayout(content),
@@ -280,7 +314,7 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no fuiste vos, te recomendamos cambiar tu contraseña desde tu perfil.</p>
     `;
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Inicio de sesión en ${APP_NAME}`,
       html: emailLayout(content),
@@ -297,7 +331,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0;"><a href="${FRONTEND_URL}/chat" style="${btnStyle}">Ir al chat para coordinar</a></p>
     `;
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Compra confirmada: ${tituloProducto} — ${APP_NAME}`,
       html: emailLayout(content),
@@ -314,7 +348,7 @@ export const emailService = {
       <p style="margin: 0 0 24px 0;"><a href="${FRONTEND_URL}/chat" style="${btnStyle}">Ir al chat para coordinar</a></p>
     `;
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Venta: ${tituloProducto} — ${APP_NAME}`,
       html: emailLayout(content),
@@ -332,7 +366,7 @@ export const emailService = {
     `;
     const textPreview = contenidoPreview.replace(/<[^>]*>/g, '').slice(0, 120);
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `${nombreRemitente} te escribió — ${APP_NAME}`,
       html: emailLayout(content),
@@ -371,7 +405,7 @@ export const emailService = {
       ${attachments?.length ? `<p style="margin: 16px 0 0 0; font-size: 13px; color: #666;">Adjuntos: ${attachments.length} archivo(s).</p>` : ''}
     `;
     await sendRequired({
-      from: FROM,
+      from: FROM(),
       to: inboxTo,
       replyTo,
       subject,
@@ -408,7 +442,7 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">Si no reconocés este intercambio, ignorá este correo.</p>
     `;
     await sendRequired({
-      from: FROM,
+      from: FROM(),
       to,
       subject: `Código de verificación — ${APP_NAME}`,
       html: emailLayout(content),
@@ -423,7 +457,7 @@ export const emailService = {
       <p style="margin: 0; color: #666666; font-size: 14px;">— El equipo de ${APP_NAME}</p>
     `;
     await sendOptional({
-      from: FROM,
+      from: FROM(),
       to,
       subject,
       html: emailLayout(content),
