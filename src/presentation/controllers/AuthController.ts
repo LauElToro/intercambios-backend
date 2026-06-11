@@ -11,6 +11,7 @@ import { UserRepository } from '../../infrastructure/repositories/UserRepository
 import prisma from '../../infrastructure/database/prisma.js';
 import { GoogleAuthUseCase, GoogleAuthAccountNotFoundError } from '../../application/use-cases/auth/GoogleAuthUseCase.js';
 import { isGoogleOAuthConfigured } from '../../infrastructure/services/google-id-token.service.js';
+import { isGoogleOAuthCodeFlowConfigured, exchangeGoogleAuthCode } from '../../infrastructure/services/google-oauth-code.service.js';
 import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
 
 const userRepository = new UserRepository();
@@ -171,6 +172,27 @@ export class AuthController {
       res.status(201).json(userWithoutPassword);
     } catch (error: any) {
       res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async googleAuthCode(req: Request, res: Response) {
+    try {
+      if (!isGoogleOAuthCodeFlowConfigured()) {
+        return res.status(503).json({ error: 'Google Sign-In OAuth no configurado en el servidor' });
+      }
+
+      const { code, redirectUri } = req.body;
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Código de Google requerido' });
+      }
+      if (!redirectUri || typeof redirectUri !== 'string') {
+        return res.status(400).json({ error: 'redirectUri requerido' });
+      }
+
+      const credential = await exchangeGoogleAuthCode(code, redirectUri.trim());
+      res.json({ credential });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'No se pudo validar el código de Google' });
     }
   }
 

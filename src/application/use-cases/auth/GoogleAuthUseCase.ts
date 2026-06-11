@@ -53,10 +53,7 @@ export class GoogleAuthUseCase {
       throw new GoogleAuthAccountNotFoundError();
     }
 
-    if (params.aceptaTerminos !== true) {
-      throw new Error('Debés aceptar los términos y condiciones para registrarte');
-    }
-
+    // Registro con Google implica aceptación de términos (terminosAceptadosAt más abajo).
     const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
     const newUser = User.create({
       nombre: profile.nombre,
