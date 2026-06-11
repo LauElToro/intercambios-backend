@@ -12,24 +12,29 @@ function generateSixDigitCode(): string {
   return String(n);
 }
 
+function maskEmail(email: string): string {
+  return email.replace(/^(.{2}).*(@.*)$/, '$1***$2');
+}
+
 export class SendMfaAndRequireVerificationUseCase {
   constructor(private userRepository: IUserRepository) {}
 
-  async execute(userId: number, email: string): Promise<{ mfaToken: string }> {
+  async execute(userId: number, email: string): Promise<{ mfaToken: string; sentTo: string }> {
+    const normalizedEmail = email.trim().toLowerCase();
     const code = generateSixDigitCode();
     const hashedCode = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + MFA_CODE_EXPIRY_MINUTES * 60 * 1000);
 
     await this.userRepository.setMfaCode(userId, hashedCode, expiresAt);
-    console.log(`[MFA] Código generado para userId=${userId}, destino=${email.replace(/^(.{2}).*(@.*)$/, '$1***$2')}`);
-    await emailService.sendMfaCode(email, code);
+    console.log(`[MFA] Código generado para userId=${userId}, destino=${maskEmail(normalizedEmail)}`);
+    await emailService.sendMfaCode(normalizedEmail, code);
 
     const mfaToken = jwt.sign(
-      { userId, email, purpose: 'mfa' },
+      { userId, email: normalizedEmail, purpose: 'mfa' },
       JWT_SECRET,
       { expiresIn: MFA_TEMP_TOKEN_EXPIRY }
     );
 
-    return { mfaToken };
+    return { mfaToken, sentTo: normalizedEmail };
   }
 }
