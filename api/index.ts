@@ -73,6 +73,20 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
+app.get('/api/health/email', async (_req: Request, res: Response) => {
+  try {
+    const { checkEmailDeliveryStatus } = await import('../src/infrastructure/services/email.service.js');
+    const email = await checkEmailDeliveryStatus();
+    const ok = email.configured && (email.mode !== 'oauth' || email.oauthTokenOk === true);
+    res.status(ok ? 200 : 503).json({ ok, email });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      email: { error: err instanceof Error ? err.message : String(err) },
+    });
+  }
+});
+
 // Public routes
 app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);

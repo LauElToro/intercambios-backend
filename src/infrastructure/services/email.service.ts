@@ -35,6 +35,45 @@ export function isEmailDeliveryConfigured(): boolean {
   return isMailConfigured();
 }
 
+export interface EmailDeliveryStatus {
+  configured: boolean;
+  mode: 'oauth' | 'password' | 'none';
+  smtpUser: string | null;
+  oauthTokenOk: boolean | null;
+  error: string | null;
+}
+
+/** Diagnóstico (p. ej. GET /api/health/email) sin enviar correo. */
+export async function checkEmailDeliveryStatus(): Promise<EmailDeliveryStatus> {
+  const mode = usesGmailOAuth() ? 'oauth' : SMTP_PASS ? 'password' : 'none';
+  const base: EmailDeliveryStatus = {
+    configured: isMailConfigured(),
+    mode,
+    smtpUser: SMTP_USER ?? null,
+    oauthTokenOk: null,
+    error: null,
+  };
+
+  if (!base.configured) {
+    return {
+      ...base,
+      error: 'Faltan SMTP_USER + OAuth (GMAIL_OAUTH_*) o SMTP_PASS en variables de entorno.',
+    };
+  }
+
+  if (mode !== 'oauth') {
+    return base;
+  }
+
+  try {
+    await getGmailAccessToken();
+    return { ...base, oauthTokenOk: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ...base, oauthTokenOk: false, error: msg };
+  }
+}
+
 const FROM = process.env.SMTP_FROM || SMTP_USER || DEFAULT_SMTP_FROM;
 const APP_NAME = 'Intercambius';
 

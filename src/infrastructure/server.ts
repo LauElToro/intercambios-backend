@@ -33,6 +33,20 @@ app.get('/health', (req: express.Request, res: express.Response) => {
   res.json({ status: 'ok', message: 'Intercambius API is running' });
 });
 
+app.get('/api/health/email', async (_req: express.Request, res: express.Response) => {
+  try {
+    const { checkEmailDeliveryStatus } = await import('./services/email.service.js');
+    const email = await checkEmailDeliveryStatus();
+    const ok = email.configured && (email.mode !== 'oauth' || email.oauthTokenOk === true);
+    res.status(ok ? 200 : 503).json({ ok, email });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      email: { error: err instanceof Error ? err.message : String(err) },
+    });
+  }
+});
+
 // Public routes
 app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);
