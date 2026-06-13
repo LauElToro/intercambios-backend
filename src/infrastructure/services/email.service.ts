@@ -3,7 +3,7 @@ import type { Attachment } from 'nodemailer/lib/mailer';
 import { OAuth2Client } from 'google-auth-library';
 import { DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
 import { EmailDeliveryError } from './email.errors.js';
-import { getEmailBannerDataUri } from './email-logo.js';
+import { getEmailBannerUrl } from './email-logo.js';
 import {
   emailButton,
   emailCallout,
@@ -220,7 +220,7 @@ function sendOptional(mailOptions: nodemailer.SendMailOptions): Promise<void> {
 
 function buildEmail(content: string, extraAttachments: Attachment[] = []) {
   return {
-    html: emailLayout(content, FRONTEND_URL, getEmailBannerDataUri()),
+    html: emailLayout(content, FRONTEND_URL, getEmailBannerUrl(FRONTEND_URL)),
     attachments: extraAttachments.length > 0 ? extraAttachments : undefined,
   };
 }

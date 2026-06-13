@@ -1,25 +1,12 @@
-import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+function trimEnv(v: string | undefined): string | undefined {
+  if (v == null) return undefined;
+  const t = v.replace(/^["']|["']$/g, '').trim();
+  return t || undefined;
+}
 
-const BANNER_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'assets', 'email-banner.png');
-
-let cachedDataUri: string | null = null;
-
-/**
- * Banner del mail embebido como data URI (sin adjuntos ni URLs externas).
- * Gmail no muestra “Descargar / Drive / Fotos” si la imagen no va como attachment.
- */
-export function getEmailBannerDataUri(): string {
-  if (cachedDataUri) return cachedDataUri;
-
-  try {
-    const content = readFileSync(BANNER_PATH);
-    cachedDataUri = `data:image/png;base64,${content.toString('base64')}`;
-    return cachedDataUri;
-  } catch {
-    throw new Error(
-      `No se encontró el banner de email en ${BANNER_PATH}. Ejecutá: npx tsx scripts/prepare-email-banner.ts`,
-    );
-  }
+/** Banner del mail servido desde el front (public/intercambius_banner_1.png). HTML liviano, sin adjuntos. */
+export function getEmailBannerUrl(frontendUrl: string): string {
+  const override = trimEnv(process.env.EMAIL_BANNER_URL);
+  if (override) return override;
+  return `${frontendUrl.replace(/\/$/, '')}/intercambius_banner_1.png`;
 }
