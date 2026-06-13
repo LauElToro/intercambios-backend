@@ -14,22 +14,26 @@ const assetsDir =
 
 const files = [
   {
-    path: `${assetsDir}/c__Users_Lautaro_AppData_Roaming_Cursor_User_workspaceStorage_c56e74923857c1db982820fd6db2afb4_images_intercambius_banner_1-0b92cf28-7028-429c-a818-557d2d8564b0.png`,
-    name: 'brand/intercambius_banner_1.png',
+    path: new URL('../../public/logo.jpg', import.meta.url),
+    name: 'brand/logo-intercambius.jpg',
+    contentType: 'image/jpeg',
   },
   {
     path: `${assetsDir}/c__Users_Lautaro_AppData_Roaming_Cursor_User_workspaceStorage_c56e74923857c1db982820fd6db2afb4_images_intercambius_banner_transparent-e1456169-1b9c-4431-a33a-33ec9b573222.png`,
     name: 'brand/intercambius_banner_transparent.png',
+    contentType: 'image/png',
   },
 ];
 
 for (const file of files) {
-  const buffer = readFileSync(file.path);
+  const filePath = typeof file.path === 'string' ? file.path : file.path.pathname.replace(/^\//, '').replace(/\//g, '\\').replace(/^([A-Z]:)/, '$1');
+  const resolvedPath = typeof file.path === 'string' ? file.path : filePath;
+  const buffer = readFileSync(resolvedPath.startsWith('E:') || resolvedPath.startsWith('e:') ? resolvedPath : file.path);
   const result = await put(file.name, buffer, {
     access: 'public',
     token,
     addRandomSuffix: false,
-    contentType: 'image/png',
+    contentType: file.contentType,
   });
   console.log(`${file.name} => ${result.url}`);
 }
