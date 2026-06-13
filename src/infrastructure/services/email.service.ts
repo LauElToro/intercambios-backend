@@ -1,7 +1,9 @@
 import nodemailer from 'nodemailer';
+import type { Attachment } from 'nodemailer/lib/mailer';
 import { OAuth2Client } from 'google-auth-library';
-import { BRAND_LOGO_URL, DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
+import { DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
 import { EmailDeliveryError } from './email.errors.js';
+import { EMAIL_LOGO_SRC, getEmailLogoAttachment } from './email-logo.js';
 import {
   emailButton,
   emailCallout,
@@ -27,7 +29,6 @@ function env(name: string): string | undefined {
 }
 
 const FRONTEND_URL = (env('FRONTEND_URL') || 'http://localhost:5173').replace(/\/$/, '');
-const LOGO_URL = env('LOGO_URL') || BRAND_LOGO_URL;
 
 function smtpUser(): string | undefined {
   return env('SMTP_USER');
@@ -217,8 +218,12 @@ function sendOptional(mailOptions: nodemailer.SendMailOptions): Promise<void> {
   });
 }
 
-function wrapEmail(content: string): string {
-  return emailLayout(content, FRONTEND_URL, LOGO_URL);
+async function buildEmail(content: string, extraAttachments: Attachment[] = []) {
+  const logoAttachment = await getEmailLogoAttachment();
+  return {
+    html: emailLayout(content, FRONTEND_URL, EMAIL_LOGO_SRC),
+    attachments: [logoAttachment, ...extraAttachments],
+  };
 }
 
 export const emailService = {
@@ -230,11 +235,13 @@ export const emailService = {
       emailCode(code, 'Código de verificación'),
       emailMuted('Válido por 10 minutos. No lo compartas con nadie.'),
     ].join('');
+    const email = await buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
       subject: `Tu código de verificación — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Tu código de verificación es: ${code}. Válido por 10 minutos.`,
     });
     console.log(`[EMAIL] MFA enviado OK a ${masked}`);
@@ -252,11 +259,13 @@ export const emailService = {
       emailButton('Restablecer contraseña', resetLink),
       emailMuted(`El enlace expira en ${expiresMinutes} minutos. Si no solicitaste esto, ignorá este correo.`),
     ].join('');
+    const email = await buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
       subject: `Restablecer contraseña — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Restablecé tu contraseña en: ${resetLink}. Expira en ${expiresMinutes} minutos.`,
     });
   },
@@ -270,11 +279,13 @@ export const emailService = {
       emailButton('Explorar el market', `${FRONTEND_URL}/market`),
       emailMuted('Si no creaste esta cuenta, podés ignorar este mensaje.'),
     ].join('');
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject: `Bienvenido a ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Hola ${nombre}, bienvenido a ${APP_NAME}. Explorá el market en ${FRONTEND_URL}/market`,
     });
   },
@@ -285,11 +296,13 @@ export const emailService = {
       emailCallout('Si fuiste vos, no tenés que hacer nada.'),
       emailMuted('Si no fuiste vos, te recomendamos cambiar tu contraseña desde tu perfil lo antes posible.'),
     ].join('');
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject: `Inicio de sesión en ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Se inició sesión en tu cuenta de ${APP_NAME}.`,
     });
   },
@@ -304,11 +317,13 @@ export const emailService = {
       emailParagraph('Coordiná la entrega con la otra parte desde el chat.'),
       emailButton('Ir al chat', `${FRONTEND_URL}/chat`),
     ].join('');
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject: `Compra confirmada: ${tituloProducto} — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Compra confirmada: ${tituloProducto} (${precio} IX). Coordiná la entrega por chat en ${FRONTEND_URL}/chat`,
     });
   },
@@ -323,11 +338,13 @@ export const emailService = {
       emailParagraph('Coordiná la entrega con el comprador desde el chat.'),
       emailButton('Ir al chat', `${FRONTEND_URL}/chat`),
     ].join('');
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject: `Venta: ${tituloProducto} — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `${nombreComprador} compró "${tituloProducto}" (${precio} IX). Coordiná por chat en ${FRONTEND_URL}/chat`,
     });
   },
@@ -340,11 +357,13 @@ export const emailService = {
       emailButton('Ver conversación', chatLink),
     ].join('');
     const textPreview = contenidoPreview.replace(/<[^>]*>/g, '').slice(0, 120);
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject: `${nombreRemitente} te escribió — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `${nombreRemitente}: ${textPreview}... Ver en ${chatLink}`,
     });
   },
@@ -381,18 +400,21 @@ export const emailService = {
         ? emailMuted(`Adjuntos: ${attachments.length} archivo(s).`)
         : '',
     ].join('');
+    const userAttachments =
+      attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })) ?? [];
+    const email = await buildEmail(content, userAttachments);
     await sendRequired({
       from: FROM(),
       to: inboxTo,
       replyTo,
       subject,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: bodyText,
-      attachments: attachments?.map((a) => ({
-        filename: a.filename,
-        content: a.content,
-        contentType: a.contentType,
-      })),
     });
   },
 
@@ -418,11 +440,13 @@ export const emailService = {
       emailButton('Ir a registrar intercambio', registroUrl),
       emailMuted('Si no reconocés este intercambio, ignorá este correo.'),
     ].join('');
+    const email = await buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
       subject: `Código de verificación — ${APP_NAME}`,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: `Hola ${nombreDestinatario},${acuerdoResumen ? ` ${acuerdoResumen}.` : ''} ${nombreQuienAprueba} aprobó el intercambio. Código: ${codigo}. ${aviso} Registrá en ${registroUrl}`,
     });
   },
@@ -433,11 +457,13 @@ export const emailService = {
       `<div style="margin: 0 0 22px 0; font-size: 16px; line-height: 1.65; color: #2c2c2c;">${bodyHtml}</div>`,
       emailMuted(`— El equipo de ${APP_NAME}`),
     ].join('');
+    const email = await buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
       subject,
-      html: wrapEmail(content),
+      html: email.html,
+      attachments: email.attachments,
       text: bodyText || bodyHtml.replace(/<[^>]*>/g, '').slice(0, 500),
     });
   },

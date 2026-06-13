@@ -121,7 +121,7 @@ export function emailKeyValueTable(rows: { label: string; value: string }[]): st
   `.trim();
 }
 
-export function emailLayout(content: string, frontendUrl: string, logoUrl: string): string {
+export function emailLayout(content: string, frontendUrl: string, logoSrc: string): string {
   const siteLabel = frontendUrl.replace(/^https?:\/\//, '');
   return `
 <!DOCTYPE html>
@@ -139,9 +139,8 @@ export function emailLayout(content: string, frontendUrl: string, logoUrl: strin
       <td align="center" style="padding: 36px 16px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background-color: ${COLORS.white}; border-radius: 18px; overflow: hidden; box-shadow: 0 18px 40px rgba(20, 20, 20, 0.12); border: 1px solid rgba(20, 20, 20, 0.06);">
           <tr>
-            <td style="background: linear-gradient(180deg, ${COLORS.ink} 0%, ${COLORS.inkSoft} 100%); padding: 34px 28px 26px; text-align: center;">
-              <img src="${logoUrl}" alt="${APP_NAME}" width="168" style="display: block; margin: 0 auto; max-width: 168px; width: 168px; height: auto; border: 0;" />
-              <div style="height: 2px; margin: 22px auto 0; max-width: 220px; background: linear-gradient(90deg, transparent, ${COLORS.gold}, transparent);"></div>
+            <td style="padding: 0; line-height: 0; font-size: 0; background-color: ${COLORS.ink};">
+              <img src="${logoSrc}" alt="${APP_NAME}" width="560" role="presentation" style="display: block; width: 100%; max-width: 560px; height: auto; margin: 0; border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic;" />
             </td>
           </tr>
           <tr>
