@@ -3,7 +3,7 @@ import type { Attachment } from 'nodemailer/lib/mailer';
 import { OAuth2Client } from 'google-auth-library';
 import { DEFAULT_SMTP_FROM, NOREPLY_EMAIL } from '../config/email.constants.js';
 import { EmailDeliveryError } from './email.errors.js';
-import { EMAIL_LOGO_SRC, getEmailLogoAttachment } from './email-logo.js';
+import { getEmailBannerDataUri } from './email-logo.js';
 import {
   emailButton,
   emailCallout,
@@ -218,11 +218,10 @@ function sendOptional(mailOptions: nodemailer.SendMailOptions): Promise<void> {
   });
 }
 
-async function buildEmail(content: string, extraAttachments: Attachment[] = []) {
-  const logoAttachment = await getEmailLogoAttachment();
+function buildEmail(content: string, extraAttachments: Attachment[] = []) {
   return {
-    html: emailLayout(content, FRONTEND_URL, EMAIL_LOGO_SRC),
-    attachments: [logoAttachment, ...extraAttachments],
+    html: emailLayout(content, FRONTEND_URL, getEmailBannerDataUri()),
+    attachments: extraAttachments.length > 0 ? extraAttachments : undefined,
   };
 }
 
@@ -235,7 +234,7 @@ export const emailService = {
       emailCode(code, 'Código de verificación'),
       emailMuted('Válido por 10 minutos. No lo compartas con nadie.'),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
@@ -259,7 +258,7 @@ export const emailService = {
       emailButton('Restablecer contraseña', resetLink),
       emailMuted(`El enlace expira en ${expiresMinutes} minutos. Si no solicitaste esto, ignorá este correo.`),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
@@ -279,7 +278,7 @@ export const emailService = {
       emailButton('Explorar el market', `${FRONTEND_URL}/market`),
       emailMuted('Si no creaste esta cuenta, podés ignorar este mensaje.'),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
@@ -296,7 +295,7 @@ export const emailService = {
       emailCallout('Si fuiste vos, no tenés que hacer nada.'),
       emailMuted('Si no fuiste vos, te recomendamos cambiar tu contraseña desde tu perfil lo antes posible.'),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
@@ -317,7 +316,7 @@ export const emailService = {
       emailParagraph('Coordiná la entrega con la otra parte desde el chat.'),
       emailButton('Ir al chat', `${FRONTEND_URL}/chat`),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
@@ -338,7 +337,7 @@ export const emailService = {
       emailParagraph('Coordiná la entrega con el comprador desde el chat.'),
       emailButton('Ir al chat', `${FRONTEND_URL}/chat`),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
@@ -357,7 +356,7 @@ export const emailService = {
       emailButton('Ver conversación', chatLink),
     ].join('');
     const textPreview = contenidoPreview.replace(/<[^>]*>/g, '').slice(0, 120);
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,
@@ -406,7 +405,7 @@ export const emailService = {
         content: a.content,
         contentType: a.contentType,
       })) ?? [];
-    const email = await buildEmail(content, userAttachments);
+    const email = buildEmail(content, userAttachments);
     await sendRequired({
       from: FROM(),
       to: inboxTo,
@@ -440,7 +439,7 @@ export const emailService = {
       emailButton('Ir a registrar intercambio', registroUrl),
       emailMuted('Si no reconocés este intercambio, ignorá este correo.'),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendRequired({
       from: FROM(),
       to,
@@ -457,7 +456,7 @@ export const emailService = {
       `<div style="margin: 0 0 22px 0; font-size: 16px; line-height: 1.65; color: #2c2c2c;">${bodyHtml}</div>`,
       emailMuted(`— El equipo de ${APP_NAME}`),
     ].join('');
-    const email = await buildEmail(content);
+    const email = buildEmail(content);
     await sendOptional({
       from: FROM(),
       to,

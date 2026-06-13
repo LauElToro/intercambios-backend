@@ -3,13 +3,13 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import sharp from 'sharp';
 
-const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const assetsDir =
   'C:/Users/Lautaro/.cursor/projects/e-intercambius-el-club-de-confianza/assets';
 const sourcePath = join(
   assetsDir,
   'c__Users_Lautaro_AppData_Roaming_Cursor_User_workspaceStorage_c56e74923857c1db982820fd6db2afb4_images_intercambius_banner_1-0ab99c13-d3c3-4e71-b3c1-42eb4fbf1428.png',
 );
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const outputPath = join(rootDir, 'assets', 'email-banner.png');
 
 const input = readFileSync(sourcePath);
