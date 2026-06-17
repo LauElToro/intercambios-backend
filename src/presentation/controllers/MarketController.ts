@@ -5,6 +5,7 @@ import { MarketItem } from '../../domain/entities/MarketItem.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { haversineDistanceKm, getValidCoords, roundDistanceKm } from '../../infrastructure/utils/geo.js';
+import { assertKycVerificado, isKycRequiredError } from '../../domain/services/kycPolicy.js';
 
 const marketItemRepository = new MarketItemRepository();
 const getMarketItemsUseCase = new GetMarketItemsUseCase(marketItemRepository);
@@ -111,6 +112,16 @@ export class MarketController {
       if (!userId) {
         return res.status(401).json({ error: 'Debes iniciar sesión para crear un producto' });
       }
+
+      const seller = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { kycVerificado: true },
+      });
+      assertKycVerificado(
+        seller?.kycVerificado,
+        'Debés verificar tu identidad antes de publicar en el market.'
+      );
+
       const rubro = req.body.rubro as string;
       let stock: number | null = null;
       if (rubro === 'servicios') {
@@ -127,6 +138,9 @@ export class MarketController {
       const item = await marketItemRepository.save(body as any);
       res.status(201).json(item.toJSON());
     } catch (error: any) {
+      if (isKycRequiredError(error)) {
+        return res.status(403).json({ error: error.message, code: 'KYC_REQUIRED' });
+      }
       res.status(400).json({ error: error.message });
     }
   }

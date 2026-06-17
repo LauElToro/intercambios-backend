@@ -8,8 +8,10 @@ import { RegistroIntercambioTruequeUseCase } from '../../application/use-cases/i
 import {
   encontrarUltimaPropuestaPago,
   mensajeEsAceptacionPropuesta,
+  parsePropuestaPagoJson,
   propuestaPagoToResumen,
 } from '../../domain/services/chatPropuesta.js';
+import { assertKycVerificado } from '../../domain/services/kycPolicy.js';
 
 function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
   const t = raw.trim();
@@ -271,11 +273,13 @@ export class ChatController {
         where: { id: userId },
         select: { kycVerificado: true, nombre: true },
       });
-      if (!me?.kycVerificado) {
-        return res.status(403).json({
-          error: 'Debés verificar tu identidad antes de enviar el código.',
-          code: 'KYC_REQUIRED',
-        });
+      try {
+        assertKycVerificado(me?.kycVerificado, 'Debés verificar tu identidad antes de enviar el código.');
+      } catch (e: any) {
+        return res.status(403).json({ error: e.message, code: 'KYC_REQUIRED' });
+      }
+      if (!me) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
       const conversacion = await prisma.conversacion.findUnique({ where: { id: conversacionId } });
@@ -392,13 +396,15 @@ export class ChatController {
 
       const contenidoTrim = contenido.trim();
 
-      if (contenidoEsPropuestaIntercambioJson(contenidoTrim)) {
+      if (contenidoEsPropuestaIntercambioJson(contenidoTrim) || parsePropuestaPagoJson(contenidoTrim)) {
         const u = await prisma.user.findUnique({ where: { id: userId }, select: { kycVerificado: true } });
-        if (!u?.kycVerificado) {
-          return res.status(403).json({
-            error: 'Debés verificar tu identidad antes de proponer un intercambio.',
-            code: 'KYC_REQUIRED',
-          });
+        try {
+          const msg = parsePropuestaPagoJson(contenidoTrim)
+            ? 'Debés verificar tu identidad antes de enviar una propuesta de pago.'
+            : 'Debés verificar tu identidad antes de proponer un intercambio.';
+          assertKycVerificado(u?.kycVerificado, msg);
+        } catch (e: any) {
+          return res.status(403).json({ error: e.message, code: 'KYC_REQUIRED' });
         }
       }
 
