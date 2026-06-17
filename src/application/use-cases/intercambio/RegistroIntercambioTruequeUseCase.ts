@@ -1,87 +1,18 @@
 import prisma from '../../../infrastructure/database/prisma.js';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
+import { parseAcuerdoAceptadoDesdeMensajes } from '../../../domain/services/chatPropuesta.js';
 import { notificationService } from '../../../infrastructure/services/notification.service.js';
 
 type TipoAcuerdo = 'iox' | 'pesos' | 'usd';
 
-function parseAcuerdoDesdeMensajes(
-  mensajes: { senderId: number; contenido: string; createdAt: Date }[]
-): { tipo: TipoAcuerdo; monto: number; pagadorId: number } | null {
-  const sorted = [...mensajes].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-  const rxAceptaIox = /Acepto la propuesta de (\d+) IOX/i;
-  const rxProponeIox = /propongo pagar (\d+)\s*(?:IX|IOX)/i;
-  const rxAceptaPesos = /Acepto la propuesta de (\d+) pesos/i;
-  const rxProponePesos = /propongo pagar (\d+)\s*pesos/i;
-  const rxAceptaUsd = /Acepto la propuesta de (\d+) USD/i;
-  const rxProponeUsd = /propongo pagar (\d+)\s*USD/i;
-
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    const m = sorted[i];
-    let matchA = m.contenido.match(rxAceptaIox);
-    if (matchA) {
-      const n = parseInt(matchA[1], 10);
-      for (let j = i - 1; j >= 0; j--) {
-        const p = sorted[j];
-        const pm = p.contenido.match(rxProponeIox);
-        if (pm && parseInt(pm[1], 10) === n && p.senderId !== m.senderId) {
-          return { tipo: 'iox', monto: n, pagadorId: p.senderId };
-        }
-      }
-      continue;
-    }
-    matchA = m.contenido.match(rxAceptaPesos);
-    if (matchA) {
-      const n = parseInt(matchA[1], 10);
-      for (let j = i - 1; j >= 0; j--) {
-        const p = sorted[j];
-        const pm = p.contenido.match(rxProponePesos);
-        if (pm && parseInt(pm[1], 10) === n && p.senderId !== m.senderId) {
-          return { tipo: 'pesos', monto: n, pagadorId: p.senderId };
-        }
-      }
-      continue;
-    }
-    matchA = m.contenido.match(rxAceptaUsd);
-    if (matchA) {
-      const n = parseInt(matchA[1], 10);
-      for (let j = i - 1; j >= 0; j--) {
-        const p = sorted[j];
-        const pm = p.contenido.match(rxProponeUsd);
-        if (pm && parseInt(pm[1], 10) === n && p.senderId !== m.senderId) {
-          return { tipo: 'usd', monto: n, pagadorId: p.senderId };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
-  const t = raw.trim();
-  if (!t.startsWith('{')) return false;
-  try {
-    const o = JSON.parse(t) as { _t?: string };
-    return o && o._t === 'intercambio';
-  } catch {
-    return false;
-  }
-}
-
-function esPropuestaIntercambioContenido(c: string): boolean {
-  if (contenidoEsPropuestaIntercambioJson(c)) return true;
-  return /quiero realizar un intercambio/i.test(c) && (/ver mi producto/i.test(c) || /imagen del producto/i.test(c));
-}
-
 /**
- * Completar registro con código: solo quien recibió el mail (autor de la 1.ª propuesta
- * con cards en el hilo) y coincide el código. Para IOX mueve saldos; para pesos/USD solo
- * deja asiento informativo (0 IOX en cuenta).
+ * Completar registro con código: quien hizo la propuesta de pago recibe el email y confirma aquí.
+ * Para IOX mueve saldos; pesos/USD quedan asentados sin movimiento de IOX.
  */
 export class RegistroIntercambioTruequeUseCase {
   async execute(params: {
-    userId: number; // quien confirma (debe ser el destinatario del email: autor propuesta intercambio)
+    userId: number;
     conversacionId: number;
     codigo: string;
     descripcion: string;
@@ -119,20 +50,17 @@ export class RegistroIntercambioTruequeUseCase {
         orderBy: { createdAt: 'asc' },
         select: { senderId: true, contenido: true, createdAt: true },
       });
-      const firstProp = mensajes.find((m) => esPropuestaIntercambioContenido(m.contenido));
-      if (!firstProp) {
-        throw new Error('No hay propuesta de intercambio en este hilo');
-      }
-      const proposerId = firstProp.senderId; // quien hizo la propuesta "es" el que recibe el email
-      if (proposerId !== userId) {
-        throw new Error('Solo quien hizo la propuesta de intercambio (y recibió el código por email) puede confirmar con este flujo');
-      }
 
-      const acuerdo = parseAcuerdoDesdeMensajes(
+      const acuerdo = parseAcuerdoAceptadoDesdeMensajes(
         mensajes.map((m) => ({ ...m, createdAt: m.createdAt }))
       );
       if (!acuerdo) {
         throw new Error('No se encontró un acuerdo aceptado (propongo pagar + acepto) en el chat. Coordiná y aceptá la propuesta en el hilo primero');
+      }
+
+      const codeRecipientId = acuerdo.pagadorId;
+      if (codeRecipientId !== userId) {
+        throw new Error('Solo quien hizo la propuesta de pago (y recibió el código por email) puede confirmar con este flujo');
       }
 
       const pagadorId = acuerdo.pagadorId;
@@ -147,9 +75,10 @@ export class RegistroIntercambioTruequeUseCase {
         throw new Error('Usuario no encontrado');
       }
 
+      const montoIox = acuerdo.iox ?? 0;
       let montoAplicado = 0;
-      if (acuerdo.tipo === 'iox') {
-        montoAplicado = acuerdo.monto;
+      if (montoIox > 0) {
+        montoAplicado = montoIox;
         if (!pagador.kycVerificado || !recep.kycVerificado) {
           throw new Error('Intercambios en IOX: ambas partes deben tener la identidad verificada (KYC)');
         }
@@ -182,16 +111,12 @@ export class RegistroIntercambioTruequeUseCase {
           where: { id: recepId },
           data: { saldo: { increment: montoAplicado } },
         });
-      } else {
-        montoAplicado = 0; // no mueve saldo: acuerdo por fuera
       }
 
-      const extra =
-        acuerdo.tipo === 'pesos'
-          ? ` — Acuerdo por fuera: ${acuerdo.monto} pesos`
-          : acuerdo.tipo === 'usd'
-            ? ` — Acuerdo por fuera: ${acuerdo.monto} USD`
-            : '';
+      const extras: string[] = [];
+      if (acuerdo.pesos) extras.push(`${acuerdo.pesos} pesos`);
+      if (acuerdo.usd) extras.push(`${acuerdo.usd} USD`);
+      const extra = extras.length > 0 ? ` — Acuerdo por fuera: ${extras.join(' + ')}` : '';
 
       const intercambio = await tx.intercambio.create({
         data: {
@@ -216,7 +141,10 @@ export class RegistroIntercambioTruequeUseCase {
         },
       });
 
-      const info = `Registro de intercambio confirmado (${acuerdo.tipo === 'iox' ? `${montoAplicado} IOX` : 'sin movimiento de IOX — pago acordado por fuera'}).`;
+      const info =
+        montoAplicado > 0
+          ? `Registro de intercambio confirmado (${montoAplicado} IOX${extras.length ? ` + ${extras.join(' + ')} por fuera` : ''}).`
+          : `Registro de intercambio confirmado (sin movimiento de IOX — pago acordado por fuera${extras.length ? `: ${extras.join(' + ')}` : ''}).`;
       await tx.mensaje.create({
         data: {
           conversacionId,
@@ -231,10 +159,14 @@ export class RegistroIntercambioTruequeUseCase {
         notificationService.onCompra(pagadorId, 'Intercambio (trueque)', montoAplicado).catch(() => {});
       }
 
+      const tipoResp =
+        montoAplicado > 0 ? 'iox' : acuerdo.pesos ? 'pesos' : acuerdo.usd ? 'usd' : 'iox';
+      const montoResp = montoAplicado > 0 ? montoAplicado : acuerdo.pesos ?? acuerdo.usd ?? 0;
+
       return {
         intercambioId: intercambio.id,
-        tipo: acuerdo.tipo,
-        monto: acuerdo.monto,
+        tipo: tipoResp,
+        monto: montoResp,
         creditosAplicados: montoAplicado,
       };
     });

@@ -5,6 +5,11 @@ import prisma from '../../infrastructure/database/prisma.js';
 import { emailService, isEmailDeliveryConfigured } from '../../infrastructure/services/email.service.js';
 import { notificationService } from '../../infrastructure/services/notification.service.js';
 import { RegistroIntercambioTruequeUseCase } from '../../application/use-cases/intercambio/RegistroIntercambioTruequeUseCase.js';
+import {
+  encontrarUltimaPropuestaPago,
+  mensajeEsAceptacionPropuesta,
+  propuestaPagoToResumen,
+} from '../../domain/services/chatPropuesta.js';
 
 function contenidoEsPropuestaIntercambioJson(raw: string): boolean {
   const t = raw.trim();
@@ -282,18 +287,39 @@ export class ChatController {
       const mensajes = await prisma.mensaje.findMany({
         where: { conversacionId },
         orderBy: { createdAt: 'asc' },
-        select: { senderId: true, contenido: true },
+        select: { senderId: true, contenido: true, createdAt: true },
       });
 
-      const firstProp = mensajes.find((m) => esPropuestaIntercambioContenido(m.contenido));
-      if (!firstProp) {
-        return res.status(400).json({ error: 'No hay una propuesta de intercambio en esta conversación' });
-      }
-      if (firstProp.senderId === userId) {
-        return res.status(403).json({ error: 'Solo quien recibió la propuesta puede enviar el código' });
+      const propuestaPago = encontrarUltimaPropuestaPago(
+        mensajes.map((m) => ({ ...m, createdAt: m.createdAt }))
+      );
+      const firstPropIntercambio = mensajes.find((m) => esPropuestaIntercambioContenido(m.contenido));
+
+      let proposerId: number | null = null;
+      let requiereAceptacion = false;
+
+      if (propuestaPago) {
+        proposerId = propuestaPago.proposerId;
+        requiereAceptacion = true;
+      } else if (firstPropIntercambio) {
+        proposerId = firstPropIntercambio.senderId;
+      } else {
+        return res.status(400).json({ error: 'No hay una propuesta de pago o intercambio en esta conversación' });
       }
 
-      const proposerId = firstProp.senderId;
+      if (proposerId === userId) {
+        return res.status(403).json({ error: 'Solo la otra parte puede enviar el código al proponente' });
+      }
+
+      if (requiereAceptacion) {
+        const aceptada = mensajes.some((m) => mensajeEsAceptacionPropuesta(m.contenido));
+        if (!aceptada) {
+          return res.status(400).json({
+            error: 'Primero debe aceptarse la propuesta de pago en el chat antes de enviar el código',
+          });
+        }
+      }
+
       const proposer = await prisma.user.findUnique({
         where: { id: proposerId },
         select: { id: true, email: true, nombre: true },
@@ -304,6 +330,7 @@ export class ChatController {
 
       const code = String(randomInt(100000, 1_000_000));
       const intercambioCodigoExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const acuerdoResumen = propuestaPago ? propuestaPagoToResumen(propuestaPago.propuesta) : undefined;
 
       try {
         await emailService.sendIntercambioVerificationCode({
@@ -311,6 +338,7 @@ export class ChatController {
           nombreDestinatario: proposer.nombre,
           nombreQuienAprueba: me.nombre,
           codigo: code,
+          acuerdoResumen,
         });
       } catch (e) {
         console.error('[ChatController] enviarCodigoIntercambio email', e);
