@@ -99,6 +99,16 @@ export async function fetchDiditSessionDecision(
   sessionId: string,
   apiKey: string
 ): Promise<{ status: string; vendorData?: string }> {
+  const full = await fetchDiditSessionDecisionFull(sessionId, apiKey);
+  const status = typeof full.status === 'string' ? full.status : '';
+  const vendorData = typeof full.vendor_data === 'string' ? full.vendor_data : undefined;
+  return { status, vendorData };
+}
+
+export async function fetchDiditSessionDecisionFull(
+  sessionId: string,
+  apiKey: string
+): Promise<Record<string, unknown>> {
   const url = `https://verification.didit.me/v3/session/${encodeURIComponent(sessionId)}/decision/`;
   const res = await fetch(url, {
     method: 'GET',
@@ -121,7 +131,38 @@ export async function fetchDiditSessionDecision(
           : text.slice(0, 200);
     throw new DiditApiError(msg || `Didit decision HTTP ${res.status}`, res.status);
   }
-  const status = typeof json.status === 'string' ? json.status : '';
-  const vendorData = typeof json.vendor_data === 'string' ? json.vendor_data : undefined;
-  return { status, vendorData };
+  return json;
+}
+
+function readDocFromVerificationEntry(entry: Record<string, unknown>): string | null {
+  const doc =
+    (typeof entry.document_number === 'string' && entry.document_number) ||
+    (typeof entry.personal_number === 'string' && entry.personal_number) ||
+    null;
+  return doc?.trim() || null;
+}
+
+/** Extrae el número de documento del reporte Didit (decision API o webhook). */
+export function extractDocumentNumberFromDiditDecision(body: Record<string, unknown>): string | null {
+  const idVerifications = body.id_verifications;
+  if (Array.isArray(idVerifications)) {
+    for (const item of idVerifications) {
+      if (!item || typeof item !== 'object') continue;
+      const doc = readDocFromVerificationEntry(item as Record<string, unknown>);
+      if (doc) return doc;
+    }
+  }
+
+  const singular = body.id_verification;
+  if (singular && typeof singular === 'object') {
+    const doc = readDocFromVerificationEntry(singular as Record<string, unknown>);
+    if (doc) return doc;
+  }
+
+  const decision = body.decision;
+  if (decision && typeof decision === 'object') {
+    return extractDocumentNumberFromDiditDecision(decision as Record<string, unknown>);
+  }
+
+  return null;
 }

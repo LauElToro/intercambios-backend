@@ -42,6 +42,7 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'kycVerificado');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'kycVerificadoAt');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'kycLastDiditSessionId');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'kycDocumentNumber');
           -- Referidos
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
@@ -95,6 +96,7 @@ async function runSchemaSync(): Promise<void> {
         await prisma.$executeRawUnsafe(`UPDATE ${t} SET "referralCode" = ('ref-' || "id"::text) WHERE "referralCode" IS NULL OR "referralCode" = '';`);
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralCode_key" ON ${t}("referralCode");`);
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralSlug_key" ON ${t}("referralSlug") WHERE "referralSlug" IS NOT NULL;`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_kycDocumentNumber_key" ON ${t}("kycDocumentNumber") WHERE "kycDocumentNumber" IS NOT NULL;`);
         await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_referredById_idx" ON ${t}("referredById");`);
       } catch {
         // ignorar (tabla no existe o permisos)

@@ -9,6 +9,7 @@ import {
 } from '../../infrastructure/services/diditSession.service.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { parseUserIdFromVendorData } from '../../utils/diditVendorData.js';
+import { approveKycForUser, KycDuplicateDocumentError } from '../../domain/services/kycApproval.js';
 
 const userRepository = new UserRepository();
 
@@ -100,8 +101,21 @@ export class KycController {
       }
 
       if (diditStatusIndicatesApproved(status)) {
-        await userRepository.setKycVerificado(userId, true);
-        return res.status(200).json({ kycVerificado: true, status });
+        try {
+          await approveKycForUser(userId, { sessionId, apiKey });
+          return res.status(200).json({ kycVerificado: true, status });
+        } catch (e) {
+          if (e instanceof KycDuplicateDocumentError) {
+            await userRepository.setKycVerificado(userId, false);
+            return res.status(409).json({
+              error: e.message,
+              code: e.code,
+              kycVerificado: false,
+              status,
+            });
+          }
+          throw e;
+        }
       }
       if (diditStatusIndicatesTerminalRejection(status)) {
         await userRepository.setKycVerificado(userId, false);

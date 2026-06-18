@@ -7,6 +7,7 @@ import { emailService } from '../../../infrastructure/services/email.service.js'
 import { notificationService } from '../../../infrastructure/services/notification.service.js';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
+import { assertNoSelfDealByDocument } from '../../../domain/services/kycApproval.js';
 
 export interface CheckoutResult {
   intercambio: Intercambio;
@@ -45,6 +46,8 @@ export class CheckoutUseCase {
     if (comprador.id === vendedor.id) {
       throw new Error('No podés comprar tu propio producto');
     }
+
+    await assertNoSelfDealByDocument(comprador.id!, vendedor.id!);
 
     if (item.rubro === 'servicios') {
       const compraExistente = await this.intercambioRepository.findByCompradorAndMarketItem(

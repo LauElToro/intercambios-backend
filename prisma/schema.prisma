@@ -39,6 +39,7 @@ model User {
   kycVerificado   Boolean   @default(false)
   kycVerificadoAt DateTime?
   kycLastDiditSessionId String? // última sesión Didit (sync al volver del flujo)
+  kycDocumentNumber String? @unique // DNI/documento normalizado (único entre cuentas verificadas)
   bio           String?   @db.Text
   fotoPerfil    String?   // URL foto de perfil
   banner        String?   // URL banner

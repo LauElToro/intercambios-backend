@@ -6,6 +6,7 @@ import {
   diditStatusIndicatesApproved,
   diditStatusIndicatesTerminalRejection,
 } from '../../infrastructure/services/diditSession.service.js';
+import { approveKycForUser, KycDuplicateDocumentError } from '../../domain/services/kycApproval.js';
 
 const userRepository = new UserRepository();
 
@@ -74,8 +75,23 @@ export class DiditWebhookController {
       }
 
       if (diditStatusIndicatesApproved(status)) {
-        await userRepository.setKycVerificado(userId, true);
-        console.log('[DiditWebhook] KYC aprobado userId=%s session=%s', userId, String(body.session_id ?? ''));
+        const sessionId = typeof body.session_id === 'string' ? body.session_id : undefined;
+        const apiKey = process.env.API_KEY_DIDIT?.trim();
+        try {
+          await approveKycForUser(userId, {
+            decision: body,
+            sessionId,
+            apiKey,
+          });
+          console.log('[DiditWebhook] KYC aprobado userId=%s session=%s', userId, String(body.session_id ?? ''));
+        } catch (e) {
+          if (e instanceof KycDuplicateDocumentError) {
+            await userRepository.setKycVerificado(userId, false);
+            console.warn('[DiditWebhook] DNI duplicado userId=%s session=%s', userId, String(body.session_id ?? ''));
+            return res.status(200).json({ ok: true, rejected: 'duplicate_document' });
+          }
+          throw e;
+        }
       } else if (diditStatusIndicatesTerminalRejection(status)) {
         await userRepository.setKycVerificado(userId, false);
       }
