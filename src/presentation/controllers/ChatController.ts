@@ -8,6 +8,8 @@ import { RegistroIntercambioTruequeUseCase } from '../../application/use-cases/i
 import {
   encontrarUltimaPropuestaPago,
   mensajeEsAceptacionPropuesta,
+  mensajeEsRechazoPropuesta,
+  parseAcuerdoAceptadoDesdeMensajes,
   parsePropuestaPagoJson,
   propuestaPagoToResumen,
 } from '../../domain/services/chatPropuesta.js';
@@ -83,19 +85,29 @@ export class ChatController {
         orderBy: { updatedAt: 'desc' },
       });
 
-      const mapped = conversaciones.map((c) => {
-        const otro = c.compradorId === userId ? c.vendedor : c.comprador;
-        const ultimoMensaje = c.mensajes[0];
-        return {
-          id: c.id,
-          otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
-          marketItem: c.marketItem,
-          ultimoMensaje: ultimoMensaje
-            ? { contenido: ultimoMensaje.contenido, createdAt: ultimoMensaje.createdAt }
-            : null,
-          updatedAt: c.updatedAt,
-        };
-      });
+      const mapped = await Promise.all(
+        conversaciones.map(async (c) => {
+          const otro = c.compradorId === userId ? c.vendedor : c.comprador;
+          const ultimoMensaje = c.mensajes[0];
+          const mensajesNoLeidos = await prisma.mensaje.count({
+            where: {
+              conversacionId: c.id,
+              senderId: { not: userId },
+              leido: false,
+            },
+          });
+          return {
+            id: c.id,
+            otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
+            marketItem: c.marketItem,
+            ultimoMensaje: ultimoMensaje
+              ? { contenido: ultimoMensaje.contenido, createdAt: ultimoMensaje.createdAt }
+              : null,
+            mensajesNoLeidos,
+            updatedAt: c.updatedAt,
+          };
+        })
+      );
 
       res.json(mapped);
     } catch (error: any) {
@@ -231,11 +243,22 @@ export class ChatController {
 
       const otro = conversacion.compradorId === userId ? conversacion.vendedor : conversacion.comprador;
 
+      const acuerdo = parseAcuerdoAceptadoDesdeMensajes(
+        mensajes.map((m) => ({ senderId: m.senderId, contenido: m.contenido, createdAt: m.createdAt }))
+      );
+      const puedeConfirmarRegistro =
+        !!acuerdo &&
+        acuerdo.pagadorId === userId &&
+        !!conversacion.intercambioCodigo &&
+        !conversacion.registroIntercambioCompletadoAt;
+
       res.json({
         conversacion: {
           id: conversacion.id,
           otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
           marketItem: conversacion.marketItem,
+          puedeConfirmarRegistro,
+          registroCompletado: !!conversacion.registroIntercambioCompletadoAt,
         },
         mensajes: mensajes.map((m) => ({
           id: m.id,
@@ -343,6 +366,7 @@ export class ChatController {
           nombreQuienAprueba: me.nombre,
           codigo: code,
           acuerdoResumen,
+          conversacionId,
         });
       } catch (e) {
         console.error('[ChatController] enviarCodigoIntercambio email', e);
@@ -406,6 +430,19 @@ export class ChatController {
         } catch (e: any) {
           return res.status(403).json({ error: e.message, code: 'KYC_REQUIRED' });
         }
+
+        // Nueva propuesta invalida código anterior pendiente
+        await prisma.conversacion.update({
+          where: { id: conversacionId },
+          data: { intercambioCodigo: null, intercambioCodigoExpiresAt: null },
+        });
+      }
+
+      if (mensajeEsRechazoPropuesta(contenidoTrim)) {
+        await prisma.conversacion.update({
+          where: { id: conversacionId },
+          data: { intercambioCodigo: null, intercambioCodigoExpiresAt: null },
+        });
       }
 
       const mensaje = await prisma.mensaje.create({
@@ -448,6 +485,75 @@ export class ChatController {
         leido: mensaje.leido,
         createdAt: mensaje.createdAt,
       });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /** Marca como leídos los mensajes del otro usuario en la conversación. */
+  static async marcarConversacionLeida(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      const conversacionId = parseInt(req.params.conversacionId, 10);
+      if (!userId) return res.status(401).json({ error: 'No autorizado' });
+      if (isNaN(conversacionId)) return res.status(400).json({ error: 'ID inválido' });
+
+      const conversacion = await prisma.conversacion.findUnique({ where: { id: conversacionId } });
+      if (!conversacion) return res.status(404).json({ error: 'Conversación no encontrada' });
+      if (conversacion.compradorId !== userId && conversacion.vendedorId !== userId) {
+        return res.status(403).json({ error: 'No tenés acceso a esta conversación' });
+      }
+
+      const result = await prisma.mensaje.updateMany({
+        where: { conversacionId, senderId: { not: userId }, leido: false },
+        data: { leido: true },
+      });
+
+      res.json({ ok: true, marcados: result.count });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /** Conversaciones donde el usuario debe confirmar con el código recibido por email. */
+  static async getRegistroPendiente(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      if (!userId) return res.status(401).json({ error: 'No autorizado' });
+
+      const conversaciones = await prisma.conversacion.findMany({
+        where: {
+          OR: [{ compradorId: userId }, { vendedorId: userId }],
+          intercambioCodigo: { not: null },
+          registroIntercambioCompletadoAt: null,
+        },
+        include: {
+          comprador: { select: { id: true, nombre: true } },
+          vendedor: { select: { id: true, nombre: true } },
+          marketItem: { select: { id: true, titulo: true } },
+          mensajes: { orderBy: { createdAt: 'asc' }, select: { senderId: true, contenido: true, createdAt: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+
+      const pendientes = conversaciones
+        .map((c) => {
+          const acuerdo = parseAcuerdoAceptadoDesdeMensajes(
+            c.mensajes.map((m) => ({ ...m, createdAt: m.createdAt }))
+          );
+          if (!acuerdo || acuerdo.pagadorId !== userId) return null;
+          const otro = c.compradorId === userId ? c.vendedor : c.comprador;
+          return {
+            conversacionId: c.id,
+            otroUsuario: { id: otro.id, nombre: otro.nombre },
+            marketItem: c.marketItem,
+            propuesta: acuerdo,
+            acuerdoResumen: propuestaPagoToResumen(acuerdo),
+          };
+        })
+        .filter(Boolean);
+
+      res.json(pendientes);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

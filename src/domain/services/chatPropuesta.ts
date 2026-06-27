@@ -81,6 +81,29 @@ export function mensajeEsAceptacionPropuesta(contenido: string): boolean {
   return /acepto la propuesta/i.test(contenido);
 }
 
+export function mensajeEsRechazoPropuesta(contenido: string): boolean {
+  return /rechazo la propuesta/i.test(contenido);
+}
+
+function esMensajePropuestaPago(contenido: string): boolean {
+  return parsePropuestaPagoJson(contenido) !== null || /propongo pagar/i.test(contenido);
+}
+
+function hayRechazoEntrePropuestaYAceptacion(
+  mensajes: MensajePropuesta[],
+  propuestaIdx: number,
+  aceptacionIdx: number,
+  proposerId: number,
+  aceptadorId: number
+): boolean {
+  for (let k = propuestaIdx + 1; k < aceptacionIdx; k++) {
+    const m = mensajes[k];
+    if (m.senderId === aceptadorId && mensajeEsRechazoPropuesta(m.contenido)) return true;
+    if (m.senderId === proposerId && esMensajePropuestaPago(m.contenido)) return true;
+  }
+  return false;
+}
+
 export function encontrarUltimaPropuestaPago(
   mensajes: MensajePropuesta[]
 ): { propuesta: PropuestaPago; proposerId: number; lastIdx: number } | null {
@@ -123,6 +146,7 @@ export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]):
       if (p.senderId === aceptadorId) continue;
       const merged = mergePropuestasConsecutivas(sorted, j, p.senderId);
       if (!merged) continue;
+      if (hayRechazoEntrePropuestaYAceptacion(sorted, j, i, p.senderId, aceptadorId)) continue;
 
       const acuerdo: AcuerdoCompleto = { pagadorId: p.senderId };
       if (merged.iox) acuerdo.iox = merged.iox;

@@ -4,6 +4,7 @@ import { authMiddleware } from '../../infrastructure/middleware/auth.js';
 
 export const chatRouter = express.Router();
 
+chatRouter.get('/registro-pendiente', authMiddleware, ChatController.getRegistroPendiente);
 chatRouter.get('/', authMiddleware, ChatController.getConversaciones);
 chatRouter.post('/iniciar', authMiddleware, ChatController.iniciarConversacion);
 chatRouter.post(
@@ -16,5 +17,6 @@ chatRouter.post(
   authMiddleware,
   ChatController.registroIntercambioConCodigo
 );
+chatRouter.patch('/:conversacionId/leer', authMiddleware, ChatController.marcarConversacionLeida);
 chatRouter.get('/:conversacionId', authMiddleware, ChatController.getMensajes);
 chatRouter.post('/:conversacionId', authMiddleware, ChatController.enviarMensaje);

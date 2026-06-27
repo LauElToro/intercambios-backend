@@ -80,6 +80,7 @@ async function main() {
           nombreQuienAprueba: 'María Test',
           codigo: '392817',
           acuerdoResumen: '15.000 IOX — intercambio de prueba',
+          conversacionId: 1,
         }),
     },
     {

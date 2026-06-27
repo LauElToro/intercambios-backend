@@ -423,9 +423,10 @@ export const emailService = {
     nombreQuienAprueba: string;
     codigo: string;
     acuerdoResumen?: string;
+    conversacionId: number;
   }): Promise<void> {
-    const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen } = params;
-    const registroUrl = `${FRONTEND_URL}/registrar-intercambio`;
+    const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen, conversacionId } = params;
+    const registroUrl = `${FRONTEND_URL}/registrar-intercambio?conversacionId=${conversacionId}`;
     const aviso = `Solo entregá este código cuando te encuentres con la otra parte y/o recibas el producto.`;
     const refBlock = acuerdoResumen
       ? emailHighlightCard('Referencia del acuerdo', [escapeHtml(acuerdoResumen)])

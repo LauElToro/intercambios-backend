@@ -1,16 +1,12 @@
-import { Request, Response } from 'express';
-import { CreateIntercambioUseCase } from '../../application/use-cases/intercambio/CreateIntercambioUseCase.js';
+import { Response } from 'express';
 import { GetIntercambiosUseCase } from '../../application/use-cases/intercambio/GetIntercambiosUseCase.js';
 import { ConfirmIntercambioUseCase } from '../../application/use-cases/intercambio/ConfirmIntercambioUseCase.js';
 import { IntercambioRepository } from '../../infrastructure/repositories/IntercambioRepository.js';
-import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { MarketItemRepository } from '../../infrastructure/repositories/MarketItemRepository.js';
 import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 
 const intercambioRepository = new IntercambioRepository();
-const userRepository = new UserRepository();
 const marketItemRepository = new MarketItemRepository();
-const createIntercambioUseCase = new CreateIntercambioUseCase();
 const getIntercambiosUseCase = new GetIntercambiosUseCase(intercambioRepository);
 const confirmIntercambioUseCase = new ConfirmIntercambioUseCase(intercambioRepository);
 
@@ -82,51 +78,14 @@ export class IntercambioController {
   }
 
   static async createIntercambio(req: AuthRequest, res: Response) {
-    try {
-      const { otraPersonaId, otraPersonaNombre, descripcion, creditos, fecha, otraEmail } = req.body as {
-        otraPersonaId?: number;
-        otraPersonaNombre?: string;
-        descripcion?: string;
-        creditos?: number;
-        fecha?: string;
-        otraEmail?: string;
-      };
-
-      if (!req.userId) {
-        return res.status(401).json({ error: 'No autorizado' });
-      }
-
-      let otraId = otraPersonaId != null ? Number(otraPersonaId) : NaN;
-      let otraNom = otraPersonaNombre?.trim() || '';
-      if ((!otraId || otraId <= 0 || !otraNom) && otraEmail?.trim()) {
-        const u = await userRepository.findByEmail(otraEmail.trim().toLowerCase());
-        if (!u) {
-          return res.status(400).json({ error: 'No encontramos un usuario con ese email' });
-        }
-        otraId = u.id!;
-        otraNom = u.nombre;
-      }
-
-      if (!otraId || otraId <= 0 || !otraNom || !descripcion?.trim() || creditos === undefined) {
-        return res.status(400).json({
-          error:
-            'Faltan datos: indicá la otra parte (id y nombre, o su email) y la descripción. Los créditos (IOX) son obligatorios (podés poner 0).',
-        });
-      }
-
-      const intercambio = await createIntercambioUseCase.execute({
-        usuarioId: req.userId,
-        otraPersonaId: otraId,
-        otraPersonaNombre: otraNom,
-        descripcion: descripcion.trim(),
-        creditos: Number(creditos),
-        fecha: fecha ? new Date(fecha) : undefined,
-      });
-
-      res.status(201).json(intercambio);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message });
+    if (!req.userId) {
+      return res.status(401).json({ error: 'No autorizado' });
     }
+    // Registro manual deshabilitado: permitía mover IOX de terceros sin consentimiento.
+    return res.status(403).json({
+      error:
+        'El registro manual de intercambios está deshabilitado. Coordiná el acuerdo en el chat y confirmá con el código que llega por email.',
+    });
   }
 
   static async confirmIntercambio(req: AuthRequest, res: Response) {

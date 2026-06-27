@@ -41,6 +41,7 @@ async function main() {
     codigo: finalCode,
     acuerdoResumen:
       '25.000 IOX — acuerdo en el chat: «Acepto la propuesta de 25000 IOX. ¡Cerramos el intercambio!»',
+    conversacionId: 1,
   });
 
   console.log('Email enviado a ezewiman@gmail.com con código:', finalCode);
