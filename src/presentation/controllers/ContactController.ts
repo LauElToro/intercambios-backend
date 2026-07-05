@@ -74,10 +74,8 @@ export class ContactController {
         });
       }
 
-      const inboxTo =
-        process.env.CONTACT_INBOX_EMAIL?.trim() ||
-        process.env.SMTP_USER?.trim() ||
-        NOREPLY_EMAIL;
+      // Por ahora todo contacto/quejas va a noreply@. Cuando exista quejas@, setear CONTACT_INBOX_EMAIL.
+      const inboxTo = process.env.CONTACT_INBOX_EMAIL?.trim() || NOREPLY_EMAIL;
 
       await emailService.sendContactInquiry({
         inboxTo,
@@ -87,6 +85,8 @@ export class ContactController {
         mensaje,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
+
+      console.log(`[ContactController] Enviado (${categoria}) → ${inboxTo}, reply-to ${email}`);
 
       res.status(201).json({ ok: true, message: 'Mensaje enviado. Te responderemos a la brevedad.' });
     } catch (error: unknown) {

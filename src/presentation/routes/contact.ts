@@ -25,4 +25,17 @@ function handleUpload(
   });
 }
 
-contactRouter.post('/', handleUpload, ContactController.sendContact);
+/** Multer solo en multipart (adjuntos). JSON pasa directo vía express.json (Vercel + front sin archivos). */
+function maybeParseMultipart(
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction,
+) {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    return handleUpload(req, res, next);
+  }
+  next();
+}
+
+contactRouter.post('/', maybeParseMultipart, ContactController.sendContact);
