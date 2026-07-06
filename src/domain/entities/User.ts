@@ -23,7 +23,9 @@ export class User {
     public readonly bio?: string,
     public readonly fotoPerfil?: string,
     public readonly banner?: string,
-    public readonly redesSociales?: Record<string, string>
+    public readonly redesSociales?: Record<string, string>,
+    public readonly profileSlug?: string | null,
+    public readonly nombreTienda?: string | null
   ) {
     this._saldo = saldo;
   }
@@ -49,6 +51,8 @@ export class User {
     fotoPerfil?: string;
     banner?: string;
     redesSociales?: Record<string, string>;
+    profileSlug?: string | null;
+    nombreTienda?: string | null;
   }): User {
     return new User(
       data.id || 0,
@@ -70,7 +74,9 @@ export class User {
       data.bio,
       data.fotoPerfil,
       data.banner,
-      data.redesSociales
+      data.redesSociales,
+      data.profileSlug ?? null,
+      data.nombreTienda ?? null
     );
   }
 
@@ -100,6 +106,8 @@ export class User {
       fotoPerfil: this.fotoPerfil,
       banner: this.banner,
       redesSociales: this.redesSociales,
+      profileSlug: this.profileSlug ?? null,
+      nombreTienda: this.nombreTienda ?? null,
     };
   }
 

@@ -2,6 +2,7 @@ import { User } from '../../domain/entities/User.js';
 import { IUserRepository } from '../../domain/repositories/IUserRepository.js';
 import prisma from '../database/prisma.js';
 import { normalizeEmail } from '../../utils/normalizeEmail.js';
+import { generateUniqueProfileSlug } from '../../utils/profileSlug.js';
 
 function mapToUser(userData: any): User {
   const p = userData.perfilMercado;
@@ -26,6 +27,8 @@ function mapToUser(userData: any): User {
     fotoPerfil: userData.fotoPerfil ?? undefined,
     banner: userData.banner ?? undefined,
     redesSociales: userData.redesSociales ? (typeof userData.redesSociales === 'object' ? userData.redesSociales : undefined) : undefined,
+    profileSlug: userData.profileSlug ?? null,
+    nombreTienda: userData.nombreTienda ?? null,
   });
 }
 
@@ -76,6 +79,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async save(user: User, password?: string, options?: { googleId?: string; fotoPerfil?: string }): Promise<User> {
+    const profileSlug = await generateUniqueProfileSlug(user.nombre);
     const userData = await prisma.user.create({
       data: {
         nombre: user.nombre,
@@ -86,6 +90,7 @@ export class UserRepository implements IUserRepository {
         password: password || '',
         googleId: options?.googleId ?? null,
         fotoPerfil: options?.fotoPerfil ?? user.fotoPerfil ?? null,
+        profileSlug,
         rating: user.rating,
         totalResenas: user.totalResenas || 0,
         ubicacion: user.ubicacion || 'CABA',
@@ -136,6 +141,7 @@ export class UserRepository implements IUserRepository {
         fotoPerfil: user.fotoPerfil ?? null,
         banner: user.banner ?? null,
         redesSociales: user.redesSociales ?? undefined,
+        nombreTienda: user.nombreTienda?.trim() || null,
       },
     });
 

@@ -15,10 +15,12 @@ import { busquedasRouter } from '../src/presentation/routes/busquedas.js';
 import { notificacionesRouter } from '../src/presentation/routes/notificaciones.js';
 import { referidosRouter } from '../src/presentation/routes/referidos.js';
 import { contactRouter } from '../src/presentation/routes/contact.js';
+import { evaluacionesRouter } from '../src/presentation/routes/evaluaciones.js';
 import { geoRouter } from '../src/presentation/routes/geo.js';
 import { kycRouter } from '../src/presentation/routes/kyc.js';
 import { webhooksRouter } from '../src/presentation/routes/webhooks.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
+import type { AuthRequest } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 
@@ -118,10 +120,13 @@ app.use('/api/contact', contactRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/webhooks', webhooksRouter);
 
-// Perfil público: ver perfiles sin login (id numérico; /me va al router protegido)
+// Perfil de comunidad: requiere sesión (id numérico; /me va al router protegido)
 app.get('/api/users/:id', (req, res, next) => {
   if (req.params.id === 'me') return next();
-  return UserController.getPublicProfile(req, res);
+  return authMiddleware(req, res, (err?: unknown) => {
+    if (err) return next(err);
+    return UserController.getPublicProfile(req as AuthRequest, res);
+  });
 });
 
 // Protected routes
@@ -135,6 +140,7 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/referidos', referidosRouter);
+app.use('/api/evaluaciones', evaluacionesRouter);
 app.use('/api/kyc', authMiddleware, kycRouter);
 
 // Error handling middleware

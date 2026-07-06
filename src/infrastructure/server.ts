@@ -16,6 +16,7 @@ import { notificacionesRouter } from '../presentation/routes/notificaciones.js';
 import { referidosRouter } from '../presentation/routes/referidos.js';
 import { contactRouter } from '../presentation/routes/contact.js';
 import { geoRouter } from '../presentation/routes/geo.js';
+import { evaluacionesRouter } from '../presentation/routes/evaluaciones.js';
 import { kycRouter } from '../presentation/routes/kyc.js';
 import { webhooksRouter } from '../presentation/routes/webhooks.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
@@ -66,6 +67,7 @@ app.use('/api/checkout', checkoutRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/referidos', referidosRouter);
+app.use('/api/evaluaciones', evaluacionesRouter);
 app.use('/api/kyc', authMiddleware, kycRouter);
 
 // Error handling middleware

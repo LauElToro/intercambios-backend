@@ -46,6 +46,7 @@ async function runSchemaSync(): Promise<void> {
           -- Referidos
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCode');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralSlug');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'profileSlug');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I INTEGER', tname, 'referredById');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'referralCodeUsed');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'createdAt');
@@ -96,6 +97,7 @@ async function runSchemaSync(): Promise<void> {
         await prisma.$executeRawUnsafe(`UPDATE ${t} SET "referralCode" = ('ref-' || "id"::text) WHERE "referralCode" IS NULL OR "referralCode" = '';`);
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralCode_key" ON ${t}("referralCode");`);
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_referralSlug_key" ON ${t}("referralSlug") WHERE "referralSlug" IS NOT NULL;`);
+        await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_profileSlug_key" ON ${t}("profileSlug") WHERE "profileSlug" IS NOT NULL;`);
         await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_kycDocumentNumber_key" ON ${t}("kycDocumentNumber") WHERE "kycDocumentNumber" IS NOT NULL;`);
         await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_referredById_idx" ON ${t}("referredById");`);
       } catch {
@@ -308,7 +310,7 @@ async function runSchemaSync(): Promise<void> {
 
     // MarketItem: columnas nuevas para feeds/metadata (ADD COLUMN IF NOT EXISTS)
     const marketItemCols = [
-      ['tipoPago', 'TEXT DEFAULT \'ix\''],
+      ['tipoPago', 'TEXT DEFAULT \'ix,pesos\''],
       ['slug', 'TEXT'],
       ['status', 'TEXT DEFAULT \'active\''],
       ['condition', 'TEXT'],
@@ -346,8 +348,15 @@ async function runSchemaSync(): Promise<void> {
     } catch {
       // ignorar
     }
+    try {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "MarketItem" SET "tipoPago" = 'ix,pesos' WHERE "tipoPago" IS NULL OR "tipoPago" = 'ix' OR TRIM("tipoPago") = '';`
+      );
+    } catch {
+      // ignorar
+    }
 
-    // User: bio, fotoPerfil, banner, redesSociales, KYC Didit
+    // User: bio, fotoPerfil, banner, redesSociales, KYC Didit, nombreTienda
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fotoPerfil" TEXT;`);
@@ -358,6 +367,7 @@ async function runSchemaSync(): Promise<void> {
       );
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "nombreTienda" TEXT;`);
     } catch {
       // ignorar
     }
@@ -367,6 +377,7 @@ async function runSchemaSync(): Promise<void> {
       );
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "nombreTienda" TEXT;`);
     } catch {
       // ignorar
     }
@@ -570,6 +581,64 @@ async function runSchemaSync(): Promise<void> {
           IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Notificacion_userId_fkey') THEN
             ALTER TABLE "Notificacion" ADD CONSTRAINT "Notificacion_userId_fkey"
             FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // ya existe
+    }
+
+    // profileSlug opaco para URLs de perfil
+    for (const t of ['"User"', '"user"'] as const) {
+      try {
+        await prisma.$executeRawUnsafe(`
+          UPDATE ${t}
+          SET "profileSlug" = 'u_' || substr(md5(random()::text || "id"::text), 1, 12)
+          WHERE "profileSlug" IS NULL OR TRIM("profileSlug") = '';
+        `);
+      } catch {
+        // ignorar
+      }
+    }
+
+    // Evaluaciones post-compra
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "EvaluacionIntercambio" (
+          "id" SERIAL NOT NULL,
+          "intercambioId" INTEGER NOT NULL,
+          "evaluadorId" INTEGER NOT NULL,
+          "evaluadoId" INTEGER NOT NULL,
+          "puntuacionItem" INTEGER,
+          "puntuacionAtencion" INTEGER NOT NULL,
+          "comentario" TEXT,
+          "rubro" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "EvaluacionIntercambio_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "EvaluacionIntercambio_intercambioId_evaluadorId_key"
+        ON "EvaluacionIntercambio"("intercambioId", "evaluadorId");
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "EvaluacionIntercambio_evaluadoId_idx"
+        ON "EvaluacionIntercambio"("evaluadoId");
+      `);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'EvaluacionIntercambio_intercambioId_fkey') THEN
+            ALTER TABLE "EvaluacionIntercambio" ADD CONSTRAINT "EvaluacionIntercambio_intercambioId_fkey"
+            FOREIGN KEY ("intercambioId") REFERENCES "Intercambio"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'EvaluacionIntercambio_evaluadorId_fkey') THEN
+            ALTER TABLE "EvaluacionIntercambio" ADD CONSTRAINT "EvaluacionIntercambio_evaluadorId_fkey"
+            FOREIGN KEY ("evaluadorId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'EvaluacionIntercambio_evaluadoId_fkey') THEN
+            ALTER TABLE "EvaluacionIntercambio" ADD CONSTRAINT "EvaluacionIntercambio_evaluadoId_fkey"
+            FOREIGN KEY ("evaluadoId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
           END IF;
         END $$;
       `);

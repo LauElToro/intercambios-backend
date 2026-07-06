@@ -4,6 +4,8 @@ import { CreateUserUseCase } from '../../application/use-cases/user/CreateUserUs
 import { UpdateUserSaldoUseCase } from '../../application/use-cases/user/UpdateUserSaldoUseCase.js';
 import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
 import { User } from '../../domain/entities/User.js';
+import prisma from '../../infrastructure/database/prisma.js';
+import { isNumericUserIdParam, updateUserProfileSlug } from '../../utils/profileSlug.js';
 
 const MAX_INTERESES = 25;
 const MAX_INTERES_LEN = 80;
@@ -27,6 +29,28 @@ const userRepository = new UserRepository();
 const createUserUseCase = new CreateUserUseCase(userRepository);
 const updateUserSaldoUseCase = new UpdateUserSaldoUseCase(userRepository);
 
+async function resolveUserIdFromParam(param: string): Promise<number | null> {
+  const raw = String(param || '').trim();
+  if (!raw) return null;
+  if (isNumericUserIdParam(raw)) return parseInt(raw, 10);
+  const row = await prisma.user.findFirst({
+    where: { profileSlug: { equals: raw, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+async function loadProfileMeta(userId: number): Promise<{ profileSlug: string | null; nombreTienda: string | null }> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { profileSlug: true, nombreTienda: true },
+  });
+  return {
+    profileSlug: row?.profileSlug ?? null,
+    nombreTienda: row?.nombreTienda ?? null,
+  };
+}
+
 export class UserController {
   static async getUsers(req: Request, res: Response) {
     try {
@@ -39,31 +63,45 @@ export class UserController {
 
   static async getUserById(req: Request, res: Response) {
     try {
-      const id = parseInt(req.params.id);
-      const user = await userRepository.findById(id);
+      const userId = await resolveUserIdFromParam(req.params.id);
+      if (!userId) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      const user = await userRepository.findById(userId);
       
       if (!user) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
-      
-      res.json(user);
+
+      const { profileSlug, nombreTienda } = await loadProfileMeta(userId);
+      res.json({ ...user, profileSlug, nombreTienda });
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener usuario' });
     }
   }
 
-  /** Perfil público: sin email, saldo ni contacto (para visitantes no logueados) */
-  static async getPublicProfile(req: Request, res: Response) {
+  /** Perfil de comunidad: requiere sesión (evita enumerar perfiles sin login). */
+  static async getPublicProfile(req: AuthRequest, res: Response) {
     try {
-      const id = parseInt(req.params.id);
-      const user = await userRepository.findById(id);
+      if (!req.userId) {
+        return res.status(401).json({ error: 'Iniciá sesión para ver perfiles de la comunidad' });
+      }
+
+      const userId = await resolveUserIdFromParam(req.params.id);
+      if (!userId) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+      const user = await userRepository.findById(userId);
       
       if (!user) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
+      const { profileSlug, nombreTienda } = await loadProfileMeta(userId);
       const safe = {
         id: user.id,
+        profileSlug,
+        nombreTienda,
         nombre: user.nombre,
         ubicacion: user.ubicacion,
         rating: user.rating,
@@ -113,6 +151,15 @@ export class UserController {
           ? parseInteresesQuiero(body.interesesQuiero)
           : existingUser.interesesQuiero;
 
+      if ('profileSlug' in body && body.profileSlug != null && String(body.profileSlug).trim()) {
+        const slugResult = await updateUserProfileSlug(id, String(body.profileSlug));
+        if ('error' in slugResult) {
+          return res.status(400).json({ error: slugResult.error });
+        }
+      }
+
+      const nombreTiendaRaw = 'nombreTienda' in body ? String(body.nombreTienda ?? '').trim() : undefined;
+
       const updatedUser = User.create({
         id: existingUser.id,
         nombre: req.body.nombre ?? existingUser.nombre,
@@ -134,10 +181,12 @@ export class UserController {
         fotoPerfil: req.body.fotoPerfil !== undefined ? req.body.fotoPerfil : existingUser.fotoPerfil,
         banner: req.body.banner !== undefined ? req.body.banner : existingUser.banner,
         redesSociales: req.body.redesSociales !== undefined ? req.body.redesSociales : existingUser.redesSociales,
+        nombreTienda: nombreTiendaRaw !== undefined ? (nombreTiendaRaw || null) : existingUser.nombreTienda,
       });
 
       const savedUser = await userRepository.update(updatedUser);
-      res.json(savedUser);
+      const meta = await loadProfileMeta(id);
+      res.json({ ...savedUser, ...meta });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

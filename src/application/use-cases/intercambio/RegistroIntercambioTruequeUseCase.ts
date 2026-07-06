@@ -7,7 +7,7 @@ import { notificationService } from '../../../infrastructure/services/notificati
 type TipoAcuerdo = 'iox' | 'pesos' | 'usd';
 
 /**
- * Completar registro con código: quien hizo la propuesta de pago recibe el email y confirma aquí.
+ * Completar registro con código: el comprador recibe el email y confirma aquí para liberar el pago.
  * Para IOX mueve saldos; pesos/USD quedan asentados sin movimiento de IOX.
  */
 export class RegistroIntercambioTruequeUseCase {
@@ -58,16 +58,13 @@ export class RegistroIntercambioTruequeUseCase {
         throw new Error('No se encontró un acuerdo aceptado (propongo pagar + acepto) en el chat. Coordiná y aceptá la propuesta en el hilo primero');
       }
 
-      const codeRecipientId = acuerdo.pagadorId;
+      const codeRecipientId = conversacion.compradorId;
       if (codeRecipientId !== userId) {
-        throw new Error('Solo quien hizo la propuesta de pago (y recibió el código por email) puede confirmar con este flujo');
+        throw new Error('Solo el comprador (quien recibió el código por email) puede confirmar con este flujo');
       }
 
-      const pagadorId = acuerdo.pagadorId;
-      if (pagadorId !== conversacion.compradorId && pagadorId !== conversacion.vendedorId) {
-        throw new Error('El acuerdo en el chat no coincide con los participantes de la conversación');
-      }
-      const recepId = pagadorId === conversacion.compradorId ? conversacion.vendedorId : conversacion.compradorId;
+      const pagadorId = conversacion.compradorId;
+      const recepId = conversacion.vendedorId;
 
       const pagador = await tx.user.findUnique({ where: { id: pagadorId } });
       const recep = await tx.user.findUnique({ where: { id: recepId } });
@@ -128,8 +125,26 @@ export class RegistroIntercambioTruequeUseCase {
           fecha,
           estado: 'confirmado',
           conversacionId: conversacion.id,
+          marketItemId: conversacion.marketItemId ?? undefined,
         },
       });
+
+      if (conversacion.marketItemId) {
+        const marketItem = await tx.marketItem.findUnique({ where: { id: conversacion.marketItemId } });
+        if (marketItem && marketItem.rubro !== 'servicios') {
+          const current = marketItem.stock ?? 0;
+          if (current > 0) {
+            const newStock = current - 1;
+            await tx.marketItem.update({
+              where: { id: marketItem.id },
+              data: {
+                stock: newStock,
+                availability: newStock <= 0 ? 'out_of_stock' : 'in_stock',
+              },
+            });
+          }
+        }
+      }
 
       await tx.conversacion.update({
         where: { id: conversacionId },

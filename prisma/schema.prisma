@@ -60,6 +60,10 @@ model User {
   // Referidos
   referralCode     String   @unique @default(cuid())
   referralSlug     String?  @unique
+  // URL pública del perfil (ej. mi-tienda, lautaro-figueroa-b7324s23). Editable por el usuario.
+  profileSlug      String?  @unique
+  // Nombre público de tienda/perfil (opcional; si no hay, se muestra nombre de cuenta).
+  nombreTienda     String?
   referredById     Int?
   referralCodeUsed String?
   referredBy       User?    @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
@@ -75,12 +79,15 @@ model User {
   mensajesEnviados          Mensaje[]      @relation("MensajesUsuario")
   busquedas                 Busqueda[]
   notificaciones            Notificacion[]
+  evaluacionesHechas        EvaluacionIntercambio[] @relation("EvaluacionesHechas")
+  evaluacionesRecibidas     EvaluacionIntercambio[] @relation("EvaluacionesRecibidas")
 
   @@index([email])
   @@index([googleId])
   @@index([ubicacion])
   @@index([referralCode])
   @@index([referralSlug])
+  @@index([profileSlug])
   @@index([referredById])
 }
 
@@ -270,6 +277,7 @@ model Intercambio {
   usuario         User      @relation("UsuarioIntercambios", fields: [usuarioId], references: [id])
   otraPersona     User      @relation("OtraPersonaIntercambios", fields: [otraPersonaId], references: [id])
   marketItem      MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
+  evaluaciones    EvaluacionIntercambio[]
 
   @@index([usuarioId])
   @@index([otraPersonaId])
@@ -361,4 +369,30 @@ model Notificacion {
   @@index([userId])
   @@index([leido])
   @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// EVALUACIONES POST-COMPRA / INTERCAMBIO
+// -----------------------------------------------------------------------------
+
+model EvaluacionIntercambio {
+  id                 Int      @id @default(autoincrement())
+  intercambioId      Int
+  evaluadorId        Int
+  evaluadoId         Int
+  // Producto o servicio 1–5 (comprador → vendedor; vendedor puede omitir en UI)
+  puntuacionItem     Int?
+  // Atención / trato 1–5
+  puntuacionAtencion Int
+  comentario         String?  @db.Text
+  rubro              String?  // productos | servicios | ...
+  createdAt          DateTime @default(now())
+
+  intercambio        Intercambio @relation(fields: [intercambioId], references: [id], onDelete: Cascade)
+  evaluador          User        @relation("EvaluacionesHechas", fields: [evaluadorId], references: [id], onDelete: Cascade)
+  evaluado           User        @relation("EvaluacionesRecibidas", fields: [evaluadoId], references: [id], onDelete: Cascade)
+
+  @@unique([intercambioId, evaluadorId])
+  @@index([evaluadoId])
+  @@index([intercambioId])
 }

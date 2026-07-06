@@ -71,7 +71,7 @@ export class MarketController {
 
       const user = await prisma.user.findUnique({
         where: { id: item.vendedorId },
-        select: { id: true, nombre: true, contacto: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true, kycVerificado: true },
+        select: { id: true, nombre: true, contacto: true, ubicacion: true, rating: true, totalResenas: true, miembroDesde: true, verificado: true, kycVerificado: true, profileSlug: true, nombreTienda: true },
       });
 
       const userLat = req.query.userLat != null ? Number(req.query.userLat) : undefined;
@@ -90,7 +90,9 @@ export class MarketController {
         ...itemJson,
         vendedor: user ? {
           id: user.id,
-          nombre: user.nombre,
+          profileSlug: user.profileSlug,
+          nombreTienda: user.nombreTienda,
+          nombre: user.nombreTienda?.trim() || user.nombre,
           contacto: user.contacto,
           ubicacion: user.ubicacion,
           rating: user.rating ?? 0,
@@ -98,7 +100,7 @@ export class MarketController {
           miembroDesde: user.miembroDesde,
           verificado: user.verificado,
           kycVerificado: user.kycVerificado,
-          avatar: user.nombre.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
+          avatar: (user.nombreTienda?.trim() || user.nombre).split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
         } : null,
       });
     } catch (error) {
