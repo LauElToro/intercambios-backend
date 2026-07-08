@@ -120,13 +120,10 @@ app.use('/api/contact', contactRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/webhooks', webhooksRouter);
 
-// Perfil de comunidad: requiere sesión (id numérico; /me va al router protegido)
+// Perfil público por id o slug (sin auth; /me sigue protegido en el router)
 app.get('/api/users/:id', (req, res, next) => {
   if (req.params.id === 'me') return next();
-  return authMiddleware(req, res, (err?: unknown) => {
-    if (err) return next(err);
-    return UserController.getPublicProfile(req as AuthRequest, res);
-  });
+  return UserController.getPublicProfile(req as AuthRequest, res);
 });
 
 // Protected routes

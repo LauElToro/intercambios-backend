@@ -20,6 +20,8 @@ import { evaluacionesRouter } from '../presentation/routes/evaluaciones.js';
 import { kycRouter } from '../presentation/routes/kyc.js';
 import { webhooksRouter } from '../presentation/routes/webhooks.js';
 import { authMiddleware } from '../infrastructure/middleware/auth.js';
+import type { AuthRequest } from '../infrastructure/middleware/auth.js';
+import { UserController } from '../presentation/controllers/UserController.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,6 +57,12 @@ app.use('/api/coincidencias', coincidenciasRouter);
 app.use('/api/contact', contactRouter);
 app.use('/api/geo', geoRouter);
 app.use('/api/webhooks', webhooksRouter);
+
+// Perfil público por id o slug (sin auth; /me sigue protegido en el router)
+app.get('/api/users/:id', (req, res, next) => {
+  if (req.params.id === 'me') return next();
+  return UserController.getPublicProfile(req as AuthRequest, res);
+});
 
 // Protected routes
 app.use('/api/users', authMiddleware, usersRouter);

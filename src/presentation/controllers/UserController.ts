@@ -80,13 +80,9 @@ export class UserController {
     }
   }
 
-  /** Perfil de comunidad: requiere sesión (evita enumerar perfiles sin login). */
+  /** Perfil público de la comunidad (sin email ni datos sensibles). */
   static async getPublicProfile(req: AuthRequest, res: Response) {
     try {
-      if (!req.userId) {
-        return res.status(401).json({ error: 'Iniciá sesión para ver perfiles de la comunidad' });
-      }
-
       const userId = await resolveUserIdFromParam(req.params.id);
       if (!userId) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
