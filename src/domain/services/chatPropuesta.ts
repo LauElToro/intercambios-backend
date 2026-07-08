@@ -187,3 +187,29 @@ export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]):
   const { aceptadoAt: _, ...rest } = acuerdo;
   return rest;
 }
+
+function propuestaPagoToDisplayText(p: PropuestaPago): string {
+  const parts: string[] = [];
+  if (p.iox) parts.push(`${p.iox} IOX de diferencia`);
+  if (p.pesos) parts.push(`${p.pesos} pesos (por fuera)`);
+  if (p.usd) parts.push(`${p.usd} USD (por fuera)`);
+  if (parts.length === 0) return '';
+  return `Propongo cerrar el intercambio con: ${parts.join(', ')}. Ambos debemos aprobar el acuerdo.`;
+}
+
+/** Texto legible para previews de chat, notificaciones y emails (nunca JSON crudo). */
+export function formatearPreviewMensaje(contenido: string): string {
+  const trimmed = contenido.trim();
+  const json = parsePropuestaPagoJson(trimmed);
+  if (json) return propuestaPagoToDisplayText(json);
+  const legacy = parseLegacyPropuestaLinea(trimmed);
+  if (legacy) return propuestaPagoToDisplayText(legacy);
+  if (trimmed.startsWith('{"_t":"intercambio"')) return 'Propuesta de intercambio';
+  if (/quiero realizar un intercambio/i.test(contenido)) return 'Propuesta de intercambio';
+  if (mensajeEsAceptacionPropuesta(contenido)) return 'Aceptó la propuesta de pago';
+  if (mensajeEsRechazoPropuesta(contenido)) return 'Rechazó la propuesta de pago';
+  if (/código de verificación enviado por email/i.test(contenido)) {
+    return 'Código de verificación enviado por email';
+  }
+  return contenido.replace(/\*\*/g, '').split('\n')[0];
+}

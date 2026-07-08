@@ -56,9 +56,95 @@ export class RegistroIntercambioTruequeUseCase {
       const ultimoAcuerdo = parseUltimoAcuerdoAceptado(
         mensajes.map((m) => ({ id: m.id, senderId: m.senderId, contenido: m.contenido, createdAt: m.createdAt }))
       );
+
+      const tienePropuestaIntercambio = mensajes.some((m) =>
+        /"_t":"intercambio"/.test(m.contenido) ||
+        (/quiero realizar un intercambio/i.test(m.contenido) &&
+          (/ver mi producto/i.test(m.contenido) || /imagen del producto/i.test(m.contenido)))
+      );
+
       if (!ultimoAcuerdo) {
-        throw new Error('No se encontró un acuerdo aceptado (propongo pagar + acepto) en el chat. Coordiná y aceptá la propuesta en el hilo primero');
+        if (
+          !conversacion.intercambioCodigo ||
+          conversacion.intercambioCodigo !== cod ||
+          (conversacion.intercambioCodigoExpiresAt && conversacion.intercambioCodigoExpiresAt < new Date())
+        ) {
+          throw new Error('Código inválido o expirado');
+        }
+        if (conversacion.registroIntercambioCompletadoAt) {
+          throw new Error('Este intercambio ya fue confirmado');
+        }
+        if (!tienePropuestaIntercambio) {
+          throw new Error('No hay una propuesta de intercambio en esta conversación');
+        }
+        if (conversacion.compradorId !== userId) {
+          throw new Error('Solo quien recibió el código por email puede confirmar este intercambio');
+        }
+
+        const recepId = conversacion.vendedorId;
+        const recep = await tx.user.findUnique({ where: { id: recepId } });
+        const pagador = await tx.user.findUnique({ where: { id: userId } });
+        if (!pagador || !recep) throw new Error('Usuario no encontrado');
+
+        const intercambio = await tx.intercambio.create({
+          data: {
+            usuarioId: userId,
+            otraPersonaId: recepId,
+            otraPersonaNombre: recep.nombre,
+            descripcion: descripcion.trim(),
+            creditos: 0,
+            fecha,
+            estado: 'confirmado',
+            conversacionId: conversacion.id,
+            marketItemId: conversacion.marketItemId ?? undefined,
+          },
+        });
+
+        if (conversacion.marketItemId) {
+          const marketItem = await tx.marketItem.findUnique({ where: { id: conversacion.marketItemId } });
+          if (marketItem && marketItem.rubro !== 'servicios') {
+            const current = marketItem.stock ?? 0;
+            if (current > 0) {
+              const newStock = current - 1;
+              await tx.marketItem.update({
+                where: { id: marketItem.id },
+                data: {
+                  stock: newStock,
+                  availability: newStock <= 0 ? 'out_of_stock' : 'in_stock',
+                },
+              });
+            }
+          }
+        }
+
+        await tx.conversacion.update({
+          where: { id: conversacionId },
+          data: {
+            intercambioCodigo: null,
+            intercambioCodigoExpiresAt: null,
+            registroIntercambioCompletadoAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.mensaje.create({
+          data: {
+            conversacionId,
+            senderId: userId,
+            contenido: 'Registro de intercambio confirmado (permuta sin diferencia en IOX).',
+          },
+        });
+
+        return {
+          intercambioId: intercambio.id,
+          tipo: 'iox' as TipoAcuerdo,
+          monto: 0,
+          creditosAplicados: 0,
+          saldoPagador: pagador.saldo,
+          saldoReceptor: recep.saldo,
+        };
       }
+
       if (!acuerdoPendienteDeConfirmar(ultimoAcuerdo, conversacion.registroIntercambioCompletadoAt)) {
         throw new Error(
           'Este acuerdo ya fue confirmado. Revisá tu historial. Para otra unidad, hacé una nueva propuesta en el chat.'
@@ -77,8 +163,8 @@ export class RegistroIntercambioTruequeUseCase {
         throw new Error('Solo el comprador (quien recibió el código por email) puede confirmar con este flujo');
       }
 
-      const pagadorId = conversacion.compradorId;
-      const recepId = conversacion.vendedorId;
+      const pagadorId = acuerdo.pagadorId;
+      const recepId = pagadorId === conversacion.compradorId ? conversacion.vendedorId : conversacion.compradorId;
 
       const pagador = await tx.user.findUnique({ where: { id: pagadorId } });
       const recep = await tx.user.findUnique({ where: { id: recepId } });

@@ -14,6 +14,7 @@ import {
   parseUltimoAcuerdoAceptado,
   parsePropuestaPagoJson,
   propuestaPagoToResumen,
+  formatearPreviewMensaje,
 } from '../../domain/services/chatPropuesta.js';
 import {
   buscarCodigoActivoParaAcuerdo,
@@ -108,7 +109,10 @@ export class ChatController {
             otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
             marketItem: c.marketItem,
             ultimoMensaje: ultimoMensaje
-              ? { contenido: ultimoMensaje.contenido, createdAt: ultimoMensaje.createdAt }
+              ? {
+                  contenido: formatearPreviewMensaje(ultimoMensaje.contenido),
+                  createdAt: ultimoMensaje.createdAt,
+                }
               : null,
             mensajesNoLeidos,
             updatedAt: c.updatedAt,
@@ -266,8 +270,16 @@ export class ChatController {
           ? await buscarCodigoActivoParaAcuerdo(prisma, conversacionId, ultimoAcuerdo)
           : null;
       const codigoVigente = codigoAcuerdoEstaVigente(codigoAcuerdo);
+      const intercambioCodigoVigente = Boolean(
+        conversacion.intercambioCodigo &&
+          conversacion.intercambioCodigoExpiresAt &&
+          conversacion.intercambioCodigoExpiresAt > new Date() &&
+          !conversacion.registroIntercambioCompletadoAt
+      );
+      const codigoIntercambioEnviado = codigoVigente || intercambioCodigoVigente;
       const puedeConfirmarRegistro =
-        acuerdoPendiente && conversacion.compradorId === userId && codigoVigente;
+        conversacion.compradorId === userId &&
+        ((acuerdoPendiente && codigoVigente) || intercambioCodigoVigente);
 
       res.json({
         conversacion: {
@@ -278,6 +290,7 @@ export class ChatController {
           registroCompletado: !!conversacion.registroIntercambioCompletadoAt && !acuerdoPendiente,
           acuerdoPendienteConfirmacion: acuerdoPendiente,
           necesitaReenvioCodigo: acuerdoPendiente && !codigoVigente,
+          codigoIntercambioEnviado,
         },
         mensajes: mensajes.map((m) => ({
           id: m.id,
@@ -507,11 +520,11 @@ export class ChatController {
       if (convConUsuarios) {
         const destinatario = convConUsuarios.compradorId === userId ? convConUsuarios.vendedor : convConUsuarios.comprador;
         if (destinatario?.id) {
-          const preview = contenidoTrim.replace(/\s+/g, ' ').slice(0, 150);
+          const preview = formatearPreviewMensaje(contenidoTrim).replace(/\s+/g, ' ').slice(0, 150);
           notificationService.onNuevoMensaje(destinatario.id, mensaje.sender.nombre, conversacionId, preview).catch(() => {});
         }
         if (destinatario?.email) {
-          const preview = contenidoTrim.replace(/\s+/g, ' ').slice(0, 150);
+          const preview = formatearPreviewMensaje(contenidoTrim).replace(/\s+/g, ' ').slice(0, 150);
           emailService.sendNewMessage(destinatario.email, destinatario.nombre, mensaje.sender.nombre, preview, conversacionId).catch((err) =>
             console.error('[ChatController] Error enviando email nuevo mensaje:', err)
           );
@@ -589,23 +602,43 @@ export class ChatController {
               createdAt: m.createdAt,
             }));
             const ultimoAcuerdo = parseUltimoAcuerdoAceptado(mensajesPropuesta);
-            if (
-              !ultimoAcuerdo ||
-              !acuerdoPendienteDeConfirmar(ultimoAcuerdo, c.registroIntercambioCompletadoAt)
-            ) {
-              return null;
-            }
-            const codigoRow = await buscarCodigoActivoParaAcuerdo(prisma, c.id, ultimoAcuerdo);
-            if (!codigoAcuerdoEstaVigente(codigoRow)) return null;
-
             const otro = c.vendedor;
-            return {
-              conversacionId: c.id,
-              otroUsuario: { id: otro.id, nombre: otro.nombre },
-              marketItem: c.marketItem,
-              propuesta: ultimoAcuerdo,
-              acuerdoResumen: propuestaPagoToResumen(ultimoAcuerdo),
-            };
+
+            if (
+              ultimoAcuerdo &&
+              acuerdoPendienteDeConfirmar(ultimoAcuerdo, c.registroIntercambioCompletadoAt)
+            ) {
+              const codigoRow = await buscarCodigoActivoParaAcuerdo(prisma, c.id, ultimoAcuerdo);
+              if (!codigoAcuerdoEstaVigente(codigoRow)) return null;
+              return {
+                conversacionId: c.id,
+                otroUsuario: { id: otro.id, nombre: otro.nombre },
+                marketItem: c.marketItem,
+                propuesta: ultimoAcuerdo,
+                acuerdoResumen: propuestaPagoToResumen(ultimoAcuerdo),
+              };
+            }
+
+            const intercambioCodigoVigente = Boolean(
+              c.intercambioCodigo &&
+                c.intercambioCodigoExpiresAt &&
+                c.intercambioCodigoExpiresAt > new Date() &&
+                !c.registroIntercambioCompletadoAt
+            );
+            const tienePropuestaIntercambio = c.mensajes.some((m) =>
+              esPropuestaIntercambioContenido(m.contenido)
+            );
+            if (intercambioCodigoVigente && tienePropuestaIntercambio && !ultimoAcuerdo) {
+              return {
+                conversacionId: c.id,
+                otroUsuario: { id: otro.id, nombre: otro.nombre },
+                marketItem: c.marketItem,
+                propuesta: {},
+                acuerdoResumen: 'Intercambio sin diferencia en IOX',
+              };
+            }
+
+            return null;
           })
         )
       ).filter(Boolean);
