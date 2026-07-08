@@ -310,6 +310,12 @@ export class ChatController {
       if (conversacion.compradorId !== userId && conversacion.vendedorId !== userId) {
         return res.status(403).json({ error: 'No tenés acceso a esta conversación' });
       }
+      if (conversacion.registroIntercambioCompletadoAt) {
+        return res.status(400).json({
+          error:
+            'Este intercambio ya fue confirmado. Revisá tu historial; no hace falta ingresar otro código.',
+        });
+      }
 
       const mensajes = await prisma.mensaje.findMany({
         where: { conversacionId },

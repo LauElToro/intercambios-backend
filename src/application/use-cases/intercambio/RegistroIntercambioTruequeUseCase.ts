@@ -43,10 +43,19 @@ export class RegistroIntercambioTruequeUseCase {
         throw new Error('No tenés acceso a esta conversación');
       }
       if (conversacion.registroIntercambioCompletadoAt) {
-        throw new Error('Este intercambio ya fue registrado');
+        throw new Error(
+          'Este intercambio ya fue confirmado. Revisá tu historial: los IOX ya se aplicaron y no hace falta otro código.'
+        );
       }
-      if (!conversacion.intercambioCodigo || conversacion.intercambioCodigo !== cod) {
-        throw new Error('Código inválido o vencido');
+      if (!conversacion.intercambioCodigo) {
+        throw new Error(
+          'No hay un código activo para esta conversación. Pedí que reenvíen el código desde el chat o coordiná una nueva propuesta.'
+        );
+      }
+      if (conversacion.intercambioCodigo !== cod) {
+        throw new Error(
+          'El código no coincide con el último enviado por email. Usá el código más reciente o pedí uno nuevo desde el chat.'
+        );
       }
       if (conversacion.intercambioCodigoExpiresAt && conversacion.intercambioCodigoExpiresAt < new Date()) {
         throw new Error('El código expiró. Pedí un nuevo código desde el chat');
