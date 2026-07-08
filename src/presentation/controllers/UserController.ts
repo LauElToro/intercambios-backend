@@ -55,7 +55,7 @@ export class UserController {
   static async getUsers(req: Request, res: Response) {
     try {
       const users = await userRepository.findAll();
-      res.json(users);
+      res.json(users.map((u) => u.toJSON()));
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener usuarios' });
     }
@@ -74,7 +74,7 @@ export class UserController {
       }
 
       const { profileSlug, nombreTienda } = await loadProfileMeta(userId);
-      res.json({ ...user, profileSlug, nombreTienda });
+      res.json({ ...user.toJSON(), profileSlug, nombreTienda });
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener usuario' });
     }
@@ -122,7 +122,7 @@ export class UserController {
   static async createUser(req: Request, res: Response) {
     try {
       const user = await createUserUseCase.execute(req.body);
-      res.status(201).json(user);
+      res.status(201).json(user.toJSON());
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -182,7 +182,7 @@ export class UserController {
 
       const savedUser = await userRepository.update(updatedUser);
       const meta = await loadProfileMeta(id);
-      res.json({ ...savedUser, ...meta });
+      res.json({ ...savedUser.toJSON(), ...meta });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }
@@ -194,7 +194,7 @@ export class UserController {
       const { creditos } = req.body;
       
       const user = await updateUserSaldoUseCase.execute(id, creditos);
-      res.json(user);
+      res.json(user.toJSON());
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

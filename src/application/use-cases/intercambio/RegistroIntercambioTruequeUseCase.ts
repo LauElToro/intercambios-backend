@@ -17,7 +17,14 @@ export class RegistroIntercambioTruequeUseCase {
     codigo: string;
     descripcion: string;
     fecha: Date;
-  }): Promise<{ intercambioId: number; tipo: TipoAcuerdo; monto: number; creditosAplicados: number }> {
+  }): Promise<{
+    intercambioId: number;
+    tipo: TipoAcuerdo;
+    monto: number;
+    creditosAplicados: number;
+    saldoPagador: number;
+    saldoReceptor: number;
+  }> {
     const { userId, conversacionId, codigo, descripcion, fecha } = params;
     const cod = String(codigo).trim().replace(/\D/g, '');
     if (cod.length !== 6) {
@@ -178,11 +185,16 @@ export class RegistroIntercambioTruequeUseCase {
         montoAplicado > 0 ? 'iox' : acuerdo.pesos ? 'pesos' : acuerdo.usd ? 'usd' : 'iox';
       const montoResp = montoAplicado > 0 ? montoAplicado : acuerdo.pesos ?? acuerdo.usd ?? 0;
 
+      const pagadorFinal = await tx.user.findUnique({ where: { id: pagadorId }, select: { saldo: true } });
+      const recepFinal = await tx.user.findUnique({ where: { id: recepId }, select: { saldo: true } });
+
       return {
         intercambioId: intercambio.id,
         tipo: tipoResp,
         monto: montoResp,
         creditosAplicados: montoAplicado,
+        saldoPagador: pagadorFinal?.saldo ?? pagador.saldo,
+        saldoReceptor: recepFinal?.saldo ?? recep.saldo,
       };
     });
   }
