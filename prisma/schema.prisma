@@ -308,6 +308,7 @@ model Conversacion {
   vendedor      User      @relation("ConversacionesComoVendedor", fields: [vendedorId], references: [id], onDelete: Cascade)
   marketItem    MarketItem? @relation(fields: [marketItemId], references: [id], onDelete: SetNull)
   mensajes      Mensaje[]
+  codigosAcuerdo CodigoIntercambioAcuerdo[]
 
   @@index([compradorId])
   @@index([vendedorId])
@@ -328,6 +329,24 @@ model Mensaje {
 
   @@index([conversacionId])
   @@index([senderId])
+}
+
+// Código de 6 dígitos atado a un acuerdo aceptado concreto (permite varias compras en el mismo chat).
+model CodigoIntercambioAcuerdo {
+  id                  Int       @id @default(autoincrement())
+  conversacionId      Int
+  aceptacionMensajeId Int
+  aceptadoAt          DateTime
+  codigo              String
+  expiresAt           DateTime?
+  usadoAt             DateTime?
+  createdAt           DateTime  @default(now())
+
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@unique([conversacionId, aceptacionMensajeId])
+  @@index([conversacionId, codigo])
+  @@index([conversacionId, usadoAt])
 }
 
 // -----------------------------------------------------------------------------

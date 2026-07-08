@@ -1,7 +1,11 @@
 import prisma from '../../../infrastructure/database/prisma.js';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
-import { parseAcuerdoAceptadoDesdeMensajes } from '../../../domain/services/chatPropuesta.js';
+import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado } from '../../../domain/services/chatPropuesta.js';
+import {
+  marcarCodigoAcuerdoUsado,
+  validarCodigoParaAcuerdo,
+} from '../../../domain/services/codigoIntercambioAcuerdo.js';
 import { notificationService } from '../../../infrastructure/services/notification.service.js';
 
 type TipoAcuerdo = 'iox' | 'pesos' | 'usd';
@@ -42,37 +46,31 @@ export class RegistroIntercambioTruequeUseCase {
       if (conversacion.compradorId !== userId && conversacion.vendedorId !== userId) {
         throw new Error('No tenés acceso a esta conversación');
       }
-      if (conversacion.registroIntercambioCompletadoAt) {
-        throw new Error(
-          'Este intercambio ya fue confirmado. Revisá tu historial: los IOX ya se aplicaron y no hace falta otro código.'
-        );
-      }
-      if (!conversacion.intercambioCodigo) {
-        throw new Error(
-          'No hay un código activo para esta conversación. Pedí que reenvíen el código desde el chat o coordiná una nueva propuesta.'
-        );
-      }
-      if (conversacion.intercambioCodigo !== cod) {
-        throw new Error(
-          'El código no coincide con el último enviado por email. Usá el código más reciente o pedí uno nuevo desde el chat.'
-        );
-      }
-      if (conversacion.intercambioCodigoExpiresAt && conversacion.intercambioCodigoExpiresAt < new Date()) {
-        throw new Error('El código expiró. Pedí un nuevo código desde el chat');
-      }
 
       const mensajes = await tx.mensaje.findMany({
         where: { conversacionId },
         orderBy: { createdAt: 'asc' },
-        select: { senderId: true, contenido: true, createdAt: true },
+        select: { id: true, senderId: true, contenido: true, createdAt: true },
       });
 
-      const acuerdo = parseAcuerdoAceptadoDesdeMensajes(
-        mensajes.map((m) => ({ ...m, createdAt: m.createdAt }))
+      const ultimoAcuerdo = parseUltimoAcuerdoAceptado(
+        mensajes.map((m) => ({ id: m.id, senderId: m.senderId, contenido: m.contenido, createdAt: m.createdAt }))
       );
-      if (!acuerdo) {
+      if (!ultimoAcuerdo) {
         throw new Error('No se encontró un acuerdo aceptado (propongo pagar + acepto) en el chat. Coordiná y aceptá la propuesta en el hilo primero');
       }
+      if (!acuerdoPendienteDeConfirmar(ultimoAcuerdo, conversacion.registroIntercambioCompletadoAt)) {
+        throw new Error(
+          'Este acuerdo ya fue confirmado. Revisá tu historial. Para otra unidad, hacé una nueva propuesta en el chat.'
+        );
+      }
+
+      const validacion = await validarCodigoParaAcuerdo(tx, conversacionId, ultimoAcuerdo, cod);
+      if (!validacion.ok) {
+        throw new Error(validacion.error);
+      }
+
+      const acuerdo = ultimoAcuerdo;
 
       const codeRecipientId = conversacion.compradorId;
       if (codeRecipientId !== userId) {
@@ -161,6 +159,8 @@ export class RegistroIntercambioTruequeUseCase {
           }
         }
       }
+
+      await marcarCodigoAcuerdoUsado(tx, conversacionId, ultimoAcuerdo);
 
       await tx.conversacion.update({
         where: { id: conversacionId },

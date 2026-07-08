@@ -500,6 +500,40 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(
         `ALTER TABLE "Conversacion" ADD COLUMN IF NOT EXISTS "intercambioCodigoExpiresAt" TIMESTAMP(3);`
       );
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "Conversacion" ADD COLUMN IF NOT EXISTS "registroIntercambioCompletadoAt" TIMESTAMP(3);`
+      );
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "CodigoIntercambioAcuerdo" (
+          "id" SERIAL NOT NULL,
+          "conversacionId" INTEGER NOT NULL,
+          "aceptacionMensajeId" INTEGER NOT NULL,
+          "aceptadoAt" TIMESTAMP(3) NOT NULL,
+          "codigo" TEXT NOT NULL,
+          "expiresAt" TIMESTAMP(3),
+          "usadoAt" TIMESTAMP(3),
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "CodigoIntercambioAcuerdo_pkey" PRIMARY KEY ("id")
+        );
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "CodigoIntercambioAcuerdo_conversacionId_aceptacionMensajeId_key"
+        ON "CodigoIntercambioAcuerdo"("conversacionId", "aceptacionMensajeId");
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS "CodigoIntercambioAcuerdo_conversacionId_codigo_idx"
+        ON "CodigoIntercambioAcuerdo"("conversacionId", "codigo");
+      `);
+      await prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CodigoIntercambioAcuerdo_conversacionId_fkey') THEN
+            ALTER TABLE "CodigoIntercambioAcuerdo"
+              ADD CONSTRAINT "CodigoIntercambioAcuerdo_conversacionId_fkey"
+              FOREIGN KEY ("conversacionId") REFERENCES "Conversacion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+          END IF;
+        END $$;
+      `);
     } catch {
       // ignorar
     }

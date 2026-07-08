@@ -5,6 +5,7 @@ export interface PropuestaPago {
 }
 
 export interface MensajePropuesta {
+  id?: number;
   senderId: number;
   contenido: string;
   createdAt: Date;
@@ -132,13 +133,19 @@ export type AcuerdoCompleto = {
   pagadorId: number;
 };
 
-/** Busca la última propuesta aceptada en el hilo (soporta propuesta unificada o mensajes legacy). */
-export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]): AcuerdoCompleto | null {
+export type AcuerdoAceptado = AcuerdoCompleto & {
+  aceptadoAt: Date;
+  aceptacionMensajeId: number;
+};
+
+/** Última propuesta aceptada en el hilo (soporta propuesta unificada o mensajes legacy). */
+export function parseUltimoAcuerdoAceptado(mensajes: MensajePropuesta[]): AcuerdoAceptado | null {
   const sorted = [...mensajes].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   for (let i = sorted.length - 1; i >= 0; i--) {
     const m = sorted[i];
     if (!mensajeEsAceptacionPropuesta(m.contenido)) continue;
+    if (!m.id) continue;
 
     const aceptadorId = m.senderId;
     for (let j = i - 1; j >= 0; j--) {
@@ -148,7 +155,11 @@ export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]):
       if (!merged) continue;
       if (hayRechazoEntrePropuestaYAceptacion(sorted, j, i, p.senderId, aceptadorId)) continue;
 
-      const acuerdo: AcuerdoCompleto = { pagadorId: p.senderId };
+      const acuerdo: AcuerdoAceptado = {
+        pagadorId: p.senderId,
+        aceptadoAt: m.createdAt,
+        aceptacionMensajeId: m.id,
+      };
       if (merged.iox) acuerdo.iox = merged.iox;
       if (merged.pesos) acuerdo.pesos = merged.pesos;
       if (merged.usd) acuerdo.usd = merged.usd;
@@ -157,4 +168,22 @@ export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]):
   }
 
   return null;
+}
+
+/** True si hay un acuerdo aceptado que aún no se confirmó con código (permite 2.ª compra en el mismo chat). */
+export function acuerdoPendienteDeConfirmar(
+  acuerdo: AcuerdoAceptado | null,
+  registroCompletadoAt: Date | null | undefined
+): boolean {
+  if (!acuerdo) return false;
+  if (!registroCompletadoAt) return true;
+  return acuerdo.aceptadoAt.getTime() > registroCompletadoAt.getTime();
+}
+
+/** Busca la última propuesta aceptada en el hilo (soporta propuesta unificada o mensajes legacy). */
+export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]): AcuerdoCompleto | null {
+  const acuerdo = parseUltimoAcuerdoAceptado(mensajes);
+  if (!acuerdo) return null;
+  const { aceptadoAt: _, ...rest } = acuerdo;
+  return rest;
 }
