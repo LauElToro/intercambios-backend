@@ -12,28 +12,10 @@ const checkoutUseCase = new CheckoutUseCase(userRepository, marketItemRepository
 
 export class CheckoutController {
   static async checkout(req: AuthRequest, res: Response) {
-    try {
-      const compradorId = req.userId;
-      const marketItemId = parseInt(req.params.marketItemId ?? req.body.marketItemId);
-
-      if (!compradorId) {
-        return res.status(401).json({ error: 'Debes iniciar sesión para comprar' });
-      }
-
-      if (!marketItemId) {
-        return res.status(400).json({ error: 'Falta el ID del producto' });
-      }
-
-      const result = await checkoutUseCase.execute({ compradorId, marketItemId });
-      res.status(201).json(result);
-    } catch (error: any) {
-      if (error?.message === 'KYC_REQUIRED' || error?.code === 'KYC_REQUIRED') {
-        return res.status(403).json({
-          error: 'Debés verificar tu identidad antes de comprar con IOX.',
-          code: 'KYC_REQUIRED',
-        });
-      }
-      res.status(400).json({ error: error.message });
-    }
+    return res.status(410).json({
+      error:
+        'La compra directa ya no está disponible. Usá «Enviar propuesta» o «Contactar al vendedor» y confirmá con el código por email.',
+      code: 'CHECKOUT_DISABLED',
+    });
   }
 }

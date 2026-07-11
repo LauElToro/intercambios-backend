@@ -156,6 +156,7 @@ export function parseUltimoAcuerdoAceptado(mensajes: MensajePropuesta[]): Acuerd
       if (hayRechazoEntrePropuestaYAceptacion(sorted, j, i, p.senderId, aceptadorId)) continue;
 
       const acuerdo: AcuerdoAceptado = {
+        /** Proponente de la propuesta aceptada; usar `resolverPagadorId` para el débito real. */
         pagadorId: p.senderId,
         aceptadoAt: m.createdAt,
         aceptacionMensajeId: m.id,
@@ -195,6 +196,70 @@ function propuestaPagoToDisplayText(p: PropuestaPago): string {
   if (p.usd) parts.push(`${p.usd} USD (por fuera)`);
   if (parts.length === 0) return '';
   return `Propongo cerrar el intercambio con: ${parts.join(', ')}. Ambos debemos aprobar el acuerdo.`;
+}
+
+export function tienePropuestaIntercambioEnHilo(mensajes: MensajePropuesta[]): boolean {
+  return mensajes.some(
+    (m) =>
+      /"_t":"intercambio"/.test(m.contenido) ||
+      (/quiero realizar un intercambio/i.test(m.contenido) &&
+        (/ver mi producto/i.test(m.contenido) || /imagen del producto/i.test(m.contenido)))
+  );
+}
+
+function parseIntercambioPreciosPorRol(
+  mensajes: MensajePropuesta[],
+  compradorId: number
+): { precioComprador: number; precioVendedor: number } | null {
+  const msg = mensajes.find((m) => /"_t":"intercambio"/.test(m.contenido));
+  if (!msg) return null;
+  try {
+    const p = JSON.parse(msg.contenido) as {
+      _t?: string;
+      miProducto?: { precio?: number };
+      tuProducto?: { precio?: number };
+    };
+    if (p._t !== 'intercambio' || !p.miProducto || !p.tuProducto) return null;
+    const mi = Number(p.miProducto.precio ?? 0) || 0;
+    const tu = Number(p.tuProducto.precio ?? 0) || 0;
+    if (msg.senderId === compradorId) {
+      return { precioComprador: mi, precioVendedor: tu };
+    }
+    return { precioComprador: tu, precioVendedor: mi };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Quién debe pagar IOX según el acuerdo.
+ * - Compra en market (sin permuta): siempre el comprador de la conversación.
+ * - Permuta: quien tiene el producto de menor valor paga la diferencia; si el proponente
+ *   tiene el de mayor valor, la diferencia la paga la otra parte.
+ */
+export function resolverPagadorId(
+  compradorId: number,
+  vendedorId: number,
+  mensajes: MensajePropuesta[],
+  proposerId: number
+): number {
+  if (!tienePropuestaIntercambioEnHilo(mensajes)) {
+    return compradorId;
+  }
+
+  const precios = parseIntercambioPreciosPorRol(mensajes, compradorId);
+  if (!precios) {
+    return proposerId;
+  }
+
+  const proposerEsComprador = proposerId === compradorId;
+  const precioProposer = proposerEsComprador ? precios.precioComprador : precios.precioVendedor;
+  const precioOtro = proposerEsComprador ? precios.precioVendedor : precios.precioComprador;
+
+  if (precioProposer < precioOtro) {
+    return proposerId;
+  }
+  return proposerEsComprador ? vendedorId : compradorId;
 }
 
 /** Texto legible para previews de chat, notificaciones y emails (nunca JSON crudo). */

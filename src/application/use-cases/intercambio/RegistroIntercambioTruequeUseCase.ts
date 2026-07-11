@@ -1,7 +1,7 @@
 import prisma from '../../../infrastructure/database/prisma.js';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
-import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado } from '../../../domain/services/chatPropuesta.js';
+import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId } from '../../../domain/services/chatPropuesta.js';
 import {
   marcarCodigoAcuerdoUsado,
   validarCodigoParaAcuerdo,
@@ -163,7 +163,19 @@ export class RegistroIntercambioTruequeUseCase {
         throw new Error('Solo el comprador (quien recibió el código por email) puede confirmar con este flujo');
       }
 
-      const pagadorId = acuerdo.pagadorId;
+      const mensajesPropuesta = mensajes.map((m) => ({
+        id: m.id,
+        senderId: m.senderId,
+        contenido: m.contenido,
+        createdAt: m.createdAt,
+      }));
+
+      const pagadorId = resolverPagadorId(
+        conversacion.compradorId,
+        conversacion.vendedorId,
+        mensajesPropuesta,
+        acuerdo.pagadorId
+      );
       const recepId = pagadorId === conversacion.compradorId ? conversacion.vendedorId : conversacion.compradorId;
 
       const pagador = await tx.user.findUnique({ where: { id: pagadorId } });

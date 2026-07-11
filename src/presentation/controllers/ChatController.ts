@@ -15,7 +15,15 @@ import {
   parsePropuestaPagoJson,
   propuestaPagoToResumen,
   formatearPreviewMensaje,
+  resolverPagadorId,
+  tienePropuestaIntercambioEnHilo,
 } from '../../domain/services/chatPropuesta.js';
+import {
+  minimoIoxRequerido,
+  validarMinimoIoxEnPropuesta,
+  validarSaldoPagador,
+} from '../../domain/services/propuestaEconomy.js';
+import { DEFAULT_CREDIT_LIMIT_IOX } from '../../config/economy.js';
 import {
   buscarCodigoActivoParaAcuerdo,
   codigoAcuerdoEstaVigente,
@@ -284,6 +292,9 @@ export class ChatController {
       res.json({
         conversacion: {
           id: conversacion.id,
+          compradorId: conversacion.compradorId,
+          vendedorId: conversacion.vendedorId,
+          soyComprador: conversacion.compradorId === userId,
           otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
           marketItem: conversacion.marketItem,
           puedeConfirmarRegistro,
@@ -384,6 +395,33 @@ export class ChatController {
         if (!ultimoAcuerdo) {
           return res.status(400).json({ error: 'No se encontró el acuerdo aceptado en el chat' });
         }
+
+        const pagadorId = resolverPagadorId(
+          conversacion.compradorId,
+          conversacion.vendedorId,
+          mensajesPropuesta,
+          ultimoAcuerdo.pagadorId
+        );
+        const montoIox = ultimoAcuerdo.iox ?? 0;
+        if (montoIox > 0) {
+          const pagador = await prisma.user.findUnique({
+            where: { id: pagadorId },
+            select: { saldo: true, limite: true, kycVerificado: true },
+          });
+          if (!pagador?.kycVerificado) {
+            return res.status(400).json({
+              error: 'Quien paga en IOX debe tener la identidad verificada antes de enviar el código.',
+            });
+          }
+          const errSaldo = validarSaldoPagador(
+            pagador.saldo,
+            pagador.limite ?? DEFAULT_CREDIT_LIMIT_IOX,
+            montoIox
+          );
+          if (errSaldo) {
+            return res.status(400).json({ error: errSaldo });
+          }
+        }
       }
 
       const compradorId = conversacion.compradorId;
@@ -476,7 +514,10 @@ export class ChatController {
       const contenidoTrim = contenido.trim();
 
       if (contenidoEsPropuestaIntercambioJson(contenidoTrim) || parsePropuestaPagoJson(contenidoTrim)) {
-        const u = await prisma.user.findUnique({ where: { id: userId }, select: { kycVerificado: true } });
+        const u = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { kycVerificado: true, saldo: true, limite: true },
+        });
         try {
           const msg = parsePropuestaPagoJson(contenidoTrim)
             ? 'Debés verificar tu identidad antes de enviar una propuesta de pago.'
@@ -484,6 +525,69 @@ export class ChatController {
           assertKycVerificado(u?.kycVerificado, msg);
         } catch (e: any) {
           return res.status(403).json({ error: e.message, code: 'KYC_REQUIRED' });
+        }
+
+        const propuestaJson = parsePropuestaPagoJson(contenidoTrim);
+        if (propuestaJson) {
+          const mensajesPrevios = await prisma.mensaje.findMany({
+            where: { conversacionId },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, senderId: true, contenido: true, createdAt: true },
+          });
+
+          let valorReferencia = 0;
+          if (conversacion.marketItemId) {
+            const item = await prisma.marketItem.findUnique({
+              where: { id: conversacion.marketItemId },
+              select: { precio: true },
+            });
+            valorReferencia = item?.precio ?? 0;
+          }
+          if (tienePropuestaIntercambioEnHilo(mensajesPrevios)) {
+            const msgInter = mensajesPrevios.find((m) => /"_t":"intercambio"/.test(m.contenido));
+            if (msgInter) {
+              try {
+                const parsed = JSON.parse(msgInter.contenido) as {
+                  miProducto?: { precio?: number };
+                  tuProducto?: { precio?: number };
+                };
+                const mi = Number(parsed.miProducto?.precio ?? 0) || 0;
+                const tu = Number(parsed.tuProducto?.precio ?? 0) || 0;
+                valorReferencia = Math.max(mi, tu, valorReferencia);
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+
+          const errMin = validarMinimoIoxEnPropuesta(propuestaJson, valorReferencia);
+          if (errMin) {
+            return res.status(400).json({ error: errMin });
+          }
+
+          const pagadorId = resolverPagadorId(
+            conversacion.compradorId,
+            conversacion.vendedorId,
+            mensajesPrevios,
+            userId
+          );
+          const montoIox = propuestaJson.iox ?? 0;
+          if (montoIox > 0) {
+            const pagador = await prisma.user.findUnique({
+              where: { id: pagadorId },
+              select: { saldo: true, limite: true },
+            });
+            if (pagador) {
+              const errSaldo = validarSaldoPagador(
+                pagador.saldo,
+                pagador.limite ?? DEFAULT_CREDIT_LIMIT_IOX,
+                montoIox
+              );
+              if (errSaldo) {
+                return res.status(400).json({ error: errSaldo });
+              }
+            }
+          }
         }
 
         // Nueva propuesta invalida código anterior pendiente
