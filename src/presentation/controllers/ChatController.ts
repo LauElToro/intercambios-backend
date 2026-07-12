@@ -285,8 +285,19 @@ export class ChatController {
           !conversacion.registroIntercambioCompletadoAt
       );
       const codigoIntercambioEnviado = codigoVigente || intercambioCodigoVigente;
+
+      let codeRecipientId = conversacion.compradorId;
+      if (ultimoAcuerdo) {
+        codeRecipientId = resolverPagadorId(
+          conversacion.compradorId,
+          conversacion.vendedorId,
+          mensajesPropuesta,
+          ultimoAcuerdo.pagadorId
+        );
+      }
+
       const puedeConfirmarRegistro =
-        conversacion.compradorId === userId &&
+        userId === codeRecipientId &&
         ((acuerdoPendiente && codigoVigente) || intercambioCodigoVigente);
 
       res.json({
@@ -348,7 +359,10 @@ export class ChatController {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
-      const conversacion = await prisma.conversacion.findUnique({ where: { id: conversacionId } });
+      const conversacion = await prisma.conversacion.findUnique({
+        where: { id: conversacionId },
+        include: { marketItem: { select: { titulo: true } } },
+      });
       if (!conversacion) return res.status(404).json({ error: 'Conversación no encontrada' });
       if (conversacion.compradorId !== userId && conversacion.vendedorId !== userId) {
         return res.status(403).json({ error: 'No tenés acceso a esta conversación' });
@@ -424,13 +438,21 @@ export class ChatController {
         }
       }
 
-      const compradorId = conversacion.compradorId;
-      const comprador = await prisma.user.findUnique({
-        where: { id: compradorId },
+      const codeRecipientId = ultimoAcuerdo
+        ? resolverPagadorId(
+            conversacion.compradorId,
+            conversacion.vendedorId,
+            mensajesPropuesta,
+            ultimoAcuerdo.pagadorId
+          )
+        : conversacion.compradorId;
+
+      const destinatario = await prisma.user.findUnique({
+        where: { id: codeRecipientId },
         select: { id: true, email: true, nombre: true },
       });
-      if (!comprador?.email?.trim()) {
-        return res.status(400).json({ error: 'El comprador no tiene un email en la cuenta' });
+      if (!destinatario?.email?.trim()) {
+        return res.status(400).json({ error: 'Quien debe confirmar no tiene un email en la cuenta' });
       }
 
       const code = String(randomInt(100000, 1_000_000));
@@ -440,14 +462,16 @@ export class ChatController {
         : ultimoAcuerdo
           ? propuestaPagoToResumen(ultimoAcuerdo)
           : undefined;
+      const tituloProducto = conversacion.marketItem?.titulo?.trim() || undefined;
 
       try {
         await emailService.sendIntercambioVerificationCode({
-          to: comprador.email.trim(),
-          nombreDestinatario: comprador.nombre,
+          to: destinatario.email.trim(),
+          nombreDestinatario: destinatario.nombre,
           nombreQuienAprueba: me.nombre,
           codigo: code,
           acuerdoResumen,
+          tituloProducto,
           conversacionId,
         });
       } catch (e) {
@@ -471,24 +495,24 @@ export class ChatController {
         });
       }
 
-      const infoMsg = `Código de verificación enviado por email al comprador ${comprador.nombre} (revisá tu casilla si sos quien compra). Ingresalo en «Registrar intercambio» para confirmar — solo cuando te encuentres y/o recibas el producto.`;
+      const infoMsg = `Código de verificación enviado por email a ${destinatario.nombre} (quien paga la diferencia). Revisá tu casilla si sos esa persona e ingresalo en «Registrar intercambio» solo cuando te encuentres y/o recibas el producto.`;
       await prisma.mensaje.create({
         data: { conversacionId, senderId: userId, contenido: infoMsg },
       });
       await prisma.conversacion.update({ where: { id: conversacionId }, data: { updatedAt: new Date() } });
 
-      if (comprador.id) {
+      if (destinatario.id) {
         const preview = infoMsg.replace(/\s+/g, ' ').slice(0, 150);
         notificationService
-          .onNuevoMensaje(comprador.id, me.nombre, conversacionId, preview)
+          .onNuevoMensaje(destinatario.id, me.nombre, conversacionId, preview)
           .catch(() => {});
       }
 
       return res.status(201).json({
         ok: true,
-        emailEnviadoA: comprador.nombre,
+        emailEnviadoA: destinatario.nombre,
         mensaje:
-          'Se envió un código de 6 dígitos por email al comprador. Solo esa persona puede confirmar el intercambio.',
+          'Se envió un código de 6 dígitos por email a quien paga la diferencia. Solo esa persona puede confirmar el intercambio.',
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -682,7 +706,7 @@ export class ChatController {
 
       const conversaciones = await prisma.conversacion.findMany({
         where: {
-          compradorId: userId,
+          OR: [{ compradorId: userId }, { vendedorId: userId }],
         },
         include: {
           comprador: { select: { id: true, nombre: true } },
@@ -706,19 +730,27 @@ export class ChatController {
               createdAt: m.createdAt,
             }));
             const ultimoAcuerdo = parseUltimoAcuerdoAceptado(mensajesPropuesta);
-            const otro = c.vendedor;
+            const otro = c.compradorId === userId ? c.vendedor : c.comprador;
 
             if (
               ultimoAcuerdo &&
               acuerdoPendienteDeConfirmar(ultimoAcuerdo, c.registroIntercambioCompletadoAt)
             ) {
+              const pagadorId = resolverPagadorId(
+                c.compradorId,
+                c.vendedorId,
+                mensajesPropuesta,
+                ultimoAcuerdo.pagadorId
+              );
+              if (pagadorId !== userId) return null;
+
               const codigoRow = await buscarCodigoActivoParaAcuerdo(prisma, c.id, ultimoAcuerdo);
               if (!codigoAcuerdoEstaVigente(codigoRow)) return null;
               return {
                 conversacionId: c.id,
                 otroUsuario: { id: otro.id, nombre: otro.nombre },
                 marketItem: c.marketItem,
-                propuesta: ultimoAcuerdo,
+                propuesta: { ...ultimoAcuerdo, pagadorId },
                 acuerdoResumen: propuestaPagoToResumen(ultimoAcuerdo),
               };
             }
@@ -732,7 +764,7 @@ export class ChatController {
             const tienePropuestaIntercambio = c.mensajes.some((m) =>
               esPropuestaIntercambioContenido(m.contenido)
             );
-            if (intercambioCodigoVigente && tienePropuestaIntercambio && !ultimoAcuerdo) {
+            if (intercambioCodigoVigente && tienePropuestaIntercambio && !ultimoAcuerdo && c.compradorId === userId) {
               return {
                 conversacionId: c.id,
                 otroUsuario: { id: otro.id, nombre: otro.nombre },

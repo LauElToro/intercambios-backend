@@ -1,7 +1,8 @@
 import prisma from '../../../infrastructure/database/prisma.js';
+import type { Prisma } from '@prisma/client';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
-import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId } from '../../../domain/services/chatPropuesta.js';
+import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId, marketItemIdsParaStock, cantidadAcuerdo } from '../../../domain/services/chatPropuesta.js';
 import {
   marcarCodigoAcuerdoUsado,
   validarCodigoParaAcuerdo,
@@ -10,8 +11,29 @@ import { notificationService } from '../../../infrastructure/services/notificati
 
 type TipoAcuerdo = 'iox' | 'pesos' | 'usd';
 
+async function decrementarStockItems(
+  tx: Prisma.TransactionClient,
+  itemIds: number[],
+  cantidad: number
+): Promise<void> {
+  for (const id of itemIds) {
+    const marketItem = await tx.marketItem.findUnique({ where: { id } });
+    if (!marketItem || marketItem.rubro === 'servicios') continue;
+    const current = marketItem.stock ?? 0;
+    if (current <= 0) continue;
+    const newStock = Math.max(0, current - cantidad);
+    await tx.marketItem.update({
+      where: { id },
+      data: {
+        stock: newStock,
+        availability: newStock <= 0 ? 'out_of_stock' : 'in_stock',
+      },
+    });
+  }
+}
+
 /**
- * Completar registro con código: el comprador recibe el email y confirma aquí para liberar el pago.
+ * Completar registro con código: quien paga recibe el email y confirma aquí para liberar el pago.
  * Para IOX mueve saldos; pesos/USD quedan asentados sin movimiento de IOX.
  */
 export class RegistroIntercambioTruequeUseCase {
@@ -86,6 +108,14 @@ export class RegistroIntercambioTruequeUseCase {
         const pagador = await tx.user.findUnique({ where: { id: userId } });
         if (!pagador || !recep) throw new Error('Usuario no encontrado');
 
+        const mensajesPropuestaLegacy = mensajes.map((m) => ({
+          id: m.id,
+          senderId: m.senderId,
+          contenido: m.contenido,
+          createdAt: m.createdAt,
+        }));
+        const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuestaLegacy);
+
         const intercambio = await tx.intercambio.create({
           data: {
             usuarioId: userId,
@@ -100,22 +130,7 @@ export class RegistroIntercambioTruequeUseCase {
           },
         });
 
-        if (conversacion.marketItemId) {
-          const marketItem = await tx.marketItem.findUnique({ where: { id: conversacion.marketItemId } });
-          if (marketItem && marketItem.rubro !== 'servicios') {
-            const current = marketItem.stock ?? 0;
-            if (current > 0) {
-              const newStock = current - 1;
-              await tx.marketItem.update({
-                where: { id: marketItem.id },
-                data: {
-                  stock: newStock,
-                  availability: newStock <= 0 ? 'out_of_stock' : 'in_stock',
-                },
-              });
-            }
-          }
-        }
+        await decrementarStockItems(tx, itemIds, 1);
 
         await tx.conversacion.update({
           where: { id: conversacionId },
@@ -158,11 +173,6 @@ export class RegistroIntercambioTruequeUseCase {
 
       const acuerdo = ultimoAcuerdo;
 
-      const codeRecipientId = conversacion.compradorId;
-      if (codeRecipientId !== userId) {
-        throw new Error('Solo el comprador (quien recibió el código por email) puede confirmar con este flujo');
-      }
-
       const mensajesPropuesta = mensajes.map((m) => ({
         id: m.id,
         senderId: m.senderId,
@@ -176,6 +186,11 @@ export class RegistroIntercambioTruequeUseCase {
         mensajesPropuesta,
         acuerdo.pagadorId
       );
+
+      if (pagadorId !== userId) {
+        throw new Error('Solo quien paga (quien recibió el código por email) puede confirmar con este flujo');
+      }
+
       const recepId = pagadorId === conversacion.compradorId ? conversacion.vendedorId : conversacion.compradorId;
 
       const pagador = await tx.user.findUnique({ where: { id: pagadorId } });
@@ -241,22 +256,9 @@ export class RegistroIntercambioTruequeUseCase {
         },
       });
 
-      if (conversacion.marketItemId) {
-        const marketItem = await tx.marketItem.findUnique({ where: { id: conversacion.marketItemId } });
-        if (marketItem && marketItem.rubro !== 'servicios') {
-          const current = marketItem.stock ?? 0;
-          if (current > 0) {
-            const newStock = current - 1;
-            await tx.marketItem.update({
-              where: { id: marketItem.id },
-              data: {
-                stock: newStock,
-                availability: newStock <= 0 ? 'out_of_stock' : 'in_stock',
-              },
-            });
-          }
-        }
-      }
+      const cantidad = cantidadAcuerdo(acuerdo);
+      const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuesta);
+      await decrementarStockItems(tx, itemIds, cantidad);
 
       await marcarCodigoAcuerdoUsado(tx, conversacionId, ultimoAcuerdo);
 

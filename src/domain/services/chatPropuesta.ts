@@ -2,6 +2,7 @@ export interface PropuestaPago {
   iox?: number;
   pesos?: number;
   usd?: number;
+  cantidad?: number;
 }
 
 export interface MensajePropuesta {
@@ -20,12 +21,14 @@ export function parsePropuestaPagoJson(contenido: string): PropuestaPago | null 
       iox?: number | null;
       pesos?: number | null;
       usd?: number | null;
+      cantidad?: number | null;
     };
     if (o._t !== 'propuesta_pago') return null;
     const propuesta: PropuestaPago = {};
     if (o.iox != null && o.iox > 0) propuesta.iox = Math.floor(o.iox);
     if (o.pesos != null && o.pesos > 0) propuesta.pesos = Math.floor(o.pesos);
     if (o.usd != null && o.usd > 0) propuesta.usd = Math.floor(o.usd);
+    if (o.cantidad != null && o.cantidad > 0) propuesta.cantidad = Math.floor(o.cantidad);
     return propuesta.iox || propuesta.pesos || propuesta.usd ? propuesta : null;
   } catch {
     return null;
@@ -48,6 +51,7 @@ function mergePropuestas(a: PropuestaPago, b: PropuestaPago): PropuestaPago {
     ...(b.iox ? { iox: b.iox } : a.iox ? { iox: a.iox } : {}),
     ...(b.pesos ? { pesos: b.pesos } : a.pesos ? { pesos: a.pesos } : {}),
     ...(b.usd ? { usd: b.usd } : a.usd ? { usd: a.usd } : {}),
+    ...(b.cantidad ? { cantidad: b.cantidad } : a.cantidad ? { cantidad: a.cantidad } : {}),
   };
 }
 
@@ -130,6 +134,7 @@ export type AcuerdoCompleto = {
   iox?: number;
   pesos?: number;
   usd?: number;
+  cantidad?: number;
   pagadorId: number;
 };
 
@@ -164,6 +169,7 @@ export function parseUltimoAcuerdoAceptado(mensajes: MensajePropuesta[]): Acuerd
       if (merged.iox) acuerdo.iox = merged.iox;
       if (merged.pesos) acuerdo.pesos = merged.pesos;
       if (merged.usd) acuerdo.usd = merged.usd;
+      if (merged.cantidad) acuerdo.cantidad = merged.cantidad;
       return acuerdo;
     }
   }
@@ -260,6 +266,44 @@ export function resolverPagadorId(
     return proposerId;
   }
   return proposerEsComprador ? vendedorId : compradorId;
+}
+
+export function cantidadAcuerdo(acuerdo: { cantidad?: number } | null | undefined): number {
+  const n = acuerdo?.cantidad ?? 1;
+  return n > 0 ? Math.floor(n) : 1;
+}
+
+function parseProductIdFromUrl(url?: string): number | null {
+  if (!url) return null;
+  const m = url.match(/\/producto\/(\d+)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** IDs de publicaciones cuyo stock debe moverse al confirmar (compra o permuta). */
+export function marketItemIdsParaStock(
+  conversacion: { marketItemId: number | null },
+  mensajes: MensajePropuesta[]
+): number[] {
+  const ids = new Set<number>();
+  if (conversacion.marketItemId) ids.add(conversacion.marketItemId);
+
+  const msgInter = mensajes.find((m) => /"_t":"intercambio"/.test(m.contenido));
+  if (msgInter) {
+    try {
+      const p = JSON.parse(msgInter.contenido) as {
+        miProducto?: { url?: string };
+        tuProducto?: { url?: string };
+      };
+      const miId = parseProductIdFromUrl(p.miProducto?.url);
+      const tuId = parseProductIdFromUrl(p.tuProducto?.url);
+      if (miId) ids.add(miId);
+      if (tuId) ids.add(tuId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return [...ids];
 }
 
 /** Texto legible para previews de chat, notificaciones y emails (nunca JSON crudo). */

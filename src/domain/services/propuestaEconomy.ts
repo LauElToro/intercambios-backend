@@ -10,7 +10,8 @@ export function validarMinimoIoxEnPropuesta(
   propuesta: PropuestaPago,
   valorReferencia: number
 ): string | null {
-  const min = minimoIoxRequerido(valorReferencia);
+  const cantidad = propuesta.cantidad && propuesta.cantidad > 0 ? propuesta.cantidad : 1;
+  const min = minimoIoxRequerido(valorReferencia * cantidad);
   if (min <= 0) return null;
   const iox = propuesta.iox ?? 0;
   if (iox < min) {

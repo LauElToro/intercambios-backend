@@ -423,9 +423,10 @@ export const emailService = {
     nombreQuienAprueba: string;
     codigo: string;
     acuerdoResumen?: string;
+    tituloProducto?: string;
     conversacionId: number;
   }): Promise<void> {
-    const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen, conversacionId } = params;
+    const { to, nombreDestinatario, nombreQuienAprueba, codigo, acuerdoResumen, tituloProducto, conversacionId } = params;
     const registroUrl = `${FRONTEND_URL}/registrar-intercambio?conversacionId=${conversacionId}`;
     const aviso = `Solo entregá este código cuando te encuentres con la otra parte y/o recibas el producto.`;
     const refBlock = acuerdoResumen
@@ -441,10 +442,11 @@ export const emailService = {
       emailMuted('Si no reconocés este intercambio, ignorá este correo.'),
     ].join('');
     const email = buildEmail(content);
+    const subjectProducto = tituloProducto ? `: ${tituloProducto}` : '';
     await sendRequired({
       from: FROM(),
       to,
-      subject: `Código de verificación — ${APP_NAME}`,
+      subject: `Código de verificación${subjectProducto} — ${APP_NAME}`,
       html: email.html,
       attachments: email.attachments,
       text: `Hola ${nombreDestinatario},${acuerdoResumen ? ` ${acuerdoResumen}.` : ''} ${nombreQuienAprueba} aprobó el intercambio. Código: ${codigo}. ${aviso} Registrá en ${registroUrl}`,
