@@ -8,18 +8,27 @@ function trimEnv(v) {
   return t || undefined;
 }
 
+function isAccelerateUrl(url) {
+  return url.startsWith('prisma://') || url.startsWith('prisma+postgres://');
+}
+
+function findAccelerateUrl() {
+  for (const key of ['PRISMA_DATABASE_URL', 'POSTGRES_PRISMA_URL', 'DATABASE_URL', 'POSTGRES_URL']) {
+    const v = trimEnv(process.env[key]);
+    if (v && isAccelerateUrl(v)) return v;
+  }
+  return undefined;
+}
+
 function resolveDatabaseEnvForBuild() {
-  const prismaAccelerate = trimEnv(process.env.PRISMA_DATABASE_URL);
-  const postgresPrisma = trimEnv(process.env.POSTGRES_PRISMA_URL);
   const databaseUrl = trimEnv(process.env.DATABASE_URL);
-  const postgresUrl = trimEnv(process.env.POSTGRES_URL);
-  const accelerate = prismaAccelerate || postgresPrisma;
+  const accelerate = findAccelerateUrl();
 
   if (accelerate) {
     const shouldPrefer =
       !databaseUrl ||
       databaseUrl.includes('db.prisma.io') ||
-      databaseUrl === postgresUrl;
+      !isAccelerateUrl(databaseUrl);
     if (shouldPrefer) {
       process.env.DATABASE_URL = accelerate.replace(/^prisma\+postgres:\/\//, 'prisma://');
       process.env.PRISMA_ACCELERATE = '1';

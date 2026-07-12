@@ -24,6 +24,7 @@ import type { AuthRequest } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 import prisma from '../src/infrastructure/database/prisma.js';
+import { friendlyDatabaseErrorMessage } from '../src/infrastructure/config/database-env.js';
 
 const app = express();
 
@@ -157,9 +158,11 @@ app.use('/api/kyc', authMiddleware, kycRouter);
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Error:', err);
   applyCorsHeadersIfAllowed(req, res);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+  const dbMsg = friendlyDatabaseErrorMessage(err);
+  res.status(err.status || (dbMsg ? 503 : 500)).json({
+    error: dbMsg || err.message || 'Internal server error',
+    ...(dbMsg ? { code: 'DATABASE_UNAVAILABLE' } : {}),
+    ...(process.env.NODE_ENV === 'development' && !dbMsg && { stack: err.stack }),
   });
 });
 
