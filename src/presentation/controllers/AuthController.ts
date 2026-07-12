@@ -13,6 +13,7 @@ import { GoogleAuthUseCase, GoogleAuthAccountNotFoundError } from '../../applica
 import { isGoogleOAuthConfigured } from '../../infrastructure/services/google-id-token.service.js';
 import { isGoogleOAuthCodeFlowConfigured, exchangeGoogleAuthCode } from '../../infrastructure/services/google-oauth-code.service.js';
 import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
+import { friendlyDatabaseErrorMessage } from '../../infrastructure/config/database-env.js';
 
 const userRepository = new UserRepository();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -41,6 +42,10 @@ export class AuthController {
           error:
             'No pudimos enviar el código de verificación por email. Intentá de nuevo en unos minutos o escribinos a noreply@intercambius.com.ar.',
         });
+      }
+      const dbMsg = friendlyDatabaseErrorMessage(error);
+      if (dbMsg) {
+        return res.status(503).json({ error: dbMsg, code: 'DATABASE_UNAVAILABLE' });
       }
       const status = error.message === 'Usuario suspendido' ? 403 : 401;
       res.status(status).json({ error: error.message });
@@ -223,6 +228,10 @@ export class AuthController {
     } catch (error: any) {
       if (error instanceof GoogleAuthAccountNotFoundError) {
         return res.status(404).json({ error: error.message, code: 'GOOGLE_ACCOUNT_NOT_FOUND' });
+      }
+      const dbMsg = friendlyDatabaseErrorMessage(error);
+      if (dbMsg) {
+        return res.status(503).json({ error: dbMsg, code: 'DATABASE_UNAVAILABLE' });
       }
       const status = error.message === 'Usuario suspendido' ? 403 : 400;
       res.status(status).json({ error: error.message });

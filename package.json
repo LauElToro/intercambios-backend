@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/infrastructure/server.ts",
-    "build": "tsc && prisma generate",
+    "build": "tsc && node scripts/prisma-generate.cjs",
     "start": "node dist/infrastructure/server.js",
     "type-check": "tsc --noEmit",
-    "db:generate": "prisma generate",
+    "db:generate": "node scripts/prisma-generate.cjs",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",

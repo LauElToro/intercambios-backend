@@ -10,6 +10,33 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
+function trimEnv(v) {
+  if (!v) return undefined;
+  const t = String(v).replace(/^["']|["']$/g, '').trim();
+  return t || undefined;
+}
+
+function resolveDatabaseEnvForBuild() {
+  const prismaAccelerate = trimEnv(process.env.PRISMA_DATABASE_URL);
+  const postgresPrisma = trimEnv(process.env.POSTGRES_PRISMA_URL);
+  const databaseUrl = trimEnv(process.env.DATABASE_URL);
+  const postgresUrl = trimEnv(process.env.POSTGRES_URL);
+  const accelerate = prismaAccelerate || postgresPrisma;
+
+  if (accelerate) {
+    const shouldPrefer =
+      !databaseUrl ||
+      databaseUrl.includes('db.prisma.io') ||
+      databaseUrl === postgresUrl;
+    if (shouldPrefer) {
+      process.env.DATABASE_URL = accelerate.replace(/^prisma\+postgres:\/\//, 'prisma://');
+      process.env.PRISMA_ACCELERATE = '1';
+    }
+  }
+}
+
+resolveDatabaseEnvForBuild();
+
 const schemaPath = path.join(__dirname, '../prisma/schema.prisma');
 const isVercel = process.env.VERCEL === '1';
 const runMigrateInVercel = process.env.RUN_MIGRATE_IN_VERCEL === '1';
@@ -27,7 +54,7 @@ function run(cmd, optional = false) {
 }
 
 console.log('Running prisma generate...');
-run(`npx prisma generate --schema=${schemaPath}`);
+require('./prisma-generate.cjs');
 
 if (skipMigrate) {
   console.log('SKIP_DB_MIGRATE=1: skipping prisma migrate deploy');

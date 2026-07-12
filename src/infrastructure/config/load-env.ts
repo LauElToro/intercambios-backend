@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveDatabaseEnv } from './database-env.js';
 
 const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -12,3 +13,5 @@ dotenv.config({
   path: path.join(backendRoot, '.env'),
   override: true,
 });
+
+resolveDatabaseEnv();

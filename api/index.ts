@@ -23,6 +23,7 @@ import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import type { AuthRequest } from '../src/infrastructure/middleware/auth.js';
 import { UserController } from '../src/presentation/controllers/UserController.js';
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
+import prisma from '../src/infrastructure/database/prisma.js';
 
 const app = express();
 
@@ -64,6 +65,18 @@ app.get('/', (req: Request, res: Response) => {
       upload: '/api/upload (protected)'
     }
   });
+});
+
+app.get('/api/health/db', async (_req: Request, res: Response) => {
+  try {
+    const { friendlyDatabaseErrorMessage } = await import('../src/infrastructure/config/database-env.js');
+    await prisma.$queryRaw`SELECT 1 as ok`;
+    res.json({ ok: true, accelerate: process.env.PRISMA_ACCELERATE === '1' });
+  } catch (err) {
+    const { friendlyDatabaseErrorMessage } = await import('../src/infrastructure/config/database-env.js');
+    const message = friendlyDatabaseErrorMessage(err) || 'Error de base de datos';
+    res.status(503).json({ ok: false, error: message });
+  }
 });
 
 // Health check
