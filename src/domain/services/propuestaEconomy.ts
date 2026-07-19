@@ -15,7 +15,7 @@ export function validarMinimoIoxEnPropuesta(
   if (min <= 0) return null;
   const iox = propuesta.iox ?? 0;
   if (iox < min) {
-    return `Toda operación debe incluir al menos ${COMISION_IOX_MIN_PORCENTAJE}% en IOX (mínimo ${min} IOX para este intercambio).`;
+    return `Toda operación debe incluir al menos ${COMISION_IOX_MIN_PORCENTAJE}% en IOX (mínimo ${min} IOX).`;
   }
   return null;
 }

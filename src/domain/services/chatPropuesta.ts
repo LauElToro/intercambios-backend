@@ -1,8 +1,12 @@
+export type ModoOperacion = 'compra' | 'permuta';
+
 export interface PropuestaPago {
   iox?: number;
   pesos?: number;
   usd?: number;
   cantidad?: number;
+  /** compra = pagar el producto; permuta = canje con diferencia. */
+  modo?: ModoOperacion;
 }
 
 export interface MensajePropuesta {
@@ -10,6 +14,11 @@ export interface MensajePropuesta {
   senderId: number;
   contenido: string;
   createdAt: Date;
+}
+
+export function parseModoOperacion(raw: unknown): ModoOperacion | undefined {
+  if (raw === 'compra' || raw === 'permuta') return raw;
+  return undefined;
 }
 
 export function parsePropuestaPagoJson(contenido: string): PropuestaPago | null {
@@ -22,6 +31,7 @@ export function parsePropuestaPagoJson(contenido: string): PropuestaPago | null 
       pesos?: number | null;
       usd?: number | null;
       cantidad?: number | null;
+      modo?: string | null;
     };
     if (o._t !== 'propuesta_pago') return null;
     const propuesta: PropuestaPago = {};
@@ -29,6 +39,8 @@ export function parsePropuestaPagoJson(contenido: string): PropuestaPago | null 
     if (o.pesos != null && o.pesos > 0) propuesta.pesos = Math.floor(o.pesos);
     if (o.usd != null && o.usd > 0) propuesta.usd = Math.floor(o.usd);
     if (o.cantidad != null && o.cantidad > 0) propuesta.cantidad = Math.floor(o.cantidad);
+    const modo = parseModoOperacion(o.modo);
+    if (modo) propuesta.modo = modo;
     return propuesta.iox || propuesta.pesos || propuesta.usd ? propuesta : null;
   } catch {
     return null;
@@ -52,6 +64,7 @@ function mergePropuestas(a: PropuestaPago, b: PropuestaPago): PropuestaPago {
     ...(b.pesos ? { pesos: b.pesos } : a.pesos ? { pesos: a.pesos } : {}),
     ...(b.usd ? { usd: b.usd } : a.usd ? { usd: a.usd } : {}),
     ...(b.cantidad ? { cantidad: b.cantidad } : a.cantidad ? { cantidad: a.cantidad } : {}),
+    ...(b.modo ? { modo: b.modo } : a.modo ? { modo: a.modo } : {}),
   };
 }
 
@@ -135,6 +148,7 @@ export type AcuerdoCompleto = {
   pesos?: number;
   usd?: number;
   cantidad?: number;
+  modo?: ModoOperacion;
   pagadorId: number;
 };
 
@@ -170,6 +184,7 @@ export function parseUltimoAcuerdoAceptado(mensajes: MensajePropuesta[]): Acuerd
       if (merged.pesos) acuerdo.pesos = merged.pesos;
       if (merged.usd) acuerdo.usd = merged.usd;
       if (merged.cantidad) acuerdo.cantidad = merged.cantidad;
+      if (merged.modo) acuerdo.modo = merged.modo;
       return acuerdo;
     }
   }
@@ -197,11 +212,72 @@ export function parseAcuerdoAceptadoDesdeMensajes(mensajes: MensajePropuesta[]):
 
 function propuestaPagoToDisplayText(p: PropuestaPago): string {
   const parts: string[] = [];
-  if (p.iox) parts.push(`${p.iox} IOX de diferencia`);
+  const esPermuta = p.modo === 'permuta';
+  if (p.iox) parts.push(esPermuta ? `${p.iox} IOX de diferencia` : `${p.iox} IOX`);
   if (p.pesos) parts.push(`${p.pesos} pesos (por fuera)`);
   if (p.usd) parts.push(`${p.usd} USD (por fuera)`);
   if (parts.length === 0) return '';
-  return `Propongo cerrar el intercambio con: ${parts.join(', ')}. Ambos debemos aprobar el acuerdo.`;
+  const qty = p.cantidad && p.cantidad > 1 ? ` (${p.cantidad} unidades)` : '';
+  const verbo = esPermuta ? 'cerrar el intercambio' : 'cerrar la compra';
+  return `Propongo ${verbo} con: ${parts.join(', ')}${qty}. Ambos debemos aprobar el acuerdo.`;
+}
+
+/** Resuelve el modo de la operación: explícito en la propuesta, o compra por defecto. */
+export function resolverModoOperacion(
+  propuesta: { modo?: ModoOperacion } | null | undefined,
+  mensajes: MensajePropuesta[]
+): ModoOperacion {
+  if (propuesta?.modo === 'compra' || propuesta?.modo === 'permuta') return propuesta.modo;
+  // Sin modo explícito: si hay cards de coincidencia, legacy asumía permuta;
+  // las propuestas nuevas deben mandar modo. Default seguro = compra.
+  if (tienePropuestaIntercambioEnHilo(mensajes) && propuesta?.modo === undefined) {
+    // Compat: propuestas viejas sin modo en hilos con intercambio → permuta
+    // Solo si el hilo tiene intercambio Y no hay modo (mensajes históricos).
+    // Para no romper trueques ya negociados sin campo modo.
+    return 'permuta';
+  }
+  return 'compra';
+}
+
+/**
+ * Base para el 5% en IOX:
+ * - compra: precio del producto (market item)
+ * - permuta: |diferencia| entre ambos productos
+ */
+export function valorReferenciaOperacion(params: {
+  modo: ModoOperacion;
+  precioMarketItem: number;
+  mensajes: MensajePropuesta[];
+}): number {
+  const { modo, precioMarketItem, mensajes } = params;
+  if (modo === 'permuta') {
+    const precios = parseIntercambioPreciosAbs(mensajes);
+    if (precios) {
+      const diff = Math.abs(precios.a - precios.b);
+      if (diff > 0) return diff;
+    }
+  }
+  return Math.max(0, precioMarketItem);
+}
+
+function parseIntercambioPreciosAbs(
+  mensajes: MensajePropuesta[]
+): { a: number; b: number } | null {
+  const msg = mensajes.find((m) => /"_t":"intercambio"/.test(m.contenido));
+  if (!msg) return null;
+  try {
+    const p = JSON.parse(msg.contenido) as {
+      _t?: string;
+      miProducto?: { precio?: number };
+      tuProducto?: { precio?: number };
+    };
+    if (p._t !== 'intercambio' || !p.miProducto || !p.tuProducto) return null;
+    const a = Number(p.miProducto.precio ?? 0) || 0;
+    const b = Number(p.tuProducto.precio ?? 0) || 0;
+    return { a, b };
+  } catch {
+    return null;
+  }
 }
 
 export function tienePropuestaIntercambioEnHilo(mensajes: MensajePropuesta[]): boolean {
@@ -238,18 +314,20 @@ function parseIntercambioPreciosPorRol(
 }
 
 /**
- * Quién debe pagar IOX según el acuerdo.
- * - Compra en market (sin permuta): siempre el comprador de la conversación.
- * - Permuta: quien tiene el producto de menor valor paga la diferencia; si el proponente
- *   tiene el de mayor valor, la diferencia la paga la otra parte.
+ * Quién debe pagar IOX / recibir el código.
+ * - Compra: siempre el comprador de la conversación.
+ * - Permuta: quien tiene el producto de menor valor paga la diferencia.
  */
 export function resolverPagadorId(
   compradorId: number,
   vendedorId: number,
   mensajes: MensajePropuesta[],
-  proposerId: number
+  proposerId: number,
+  modo?: ModoOperacion
 ): number {
-  if (!tienePropuestaIntercambioEnHilo(mensajes)) {
+  const modoResuelto = modo ?? resolverModoOperacion({ modo }, mensajes);
+
+  if (modoResuelto === 'compra' || !tienePropuestaIntercambioEnHilo(mensajes)) {
     return compradorId;
   }
 
@@ -279,11 +357,22 @@ function parseProductIdFromUrl(url?: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
-/** IDs de publicaciones cuyo stock debe moverse al confirmar (compra o permuta). */
+/**
+ * IDs de publicaciones cuyo stock debe moverse al confirmar.
+ * - Compra: solo el market item de la conversación (lo que se vende).
+ * - Permuta: ambos productos del mensaje de intercambio.
+ */
 export function marketItemIdsParaStock(
   conversacion: { marketItemId: number | null },
-  mensajes: MensajePropuesta[]
+  mensajes: MensajePropuesta[],
+  modo?: ModoOperacion
 ): number[] {
+  const modoResuelto = modo ?? resolverModoOperacion({ modo }, mensajes);
+
+  if (modoResuelto === 'compra') {
+    return conversacion.marketItemId ? [conversacion.marketItemId] : [];
+  }
+
   const ids = new Set<number>();
   if (conversacion.marketItemId) ids.add(conversacion.marketItemId);
 

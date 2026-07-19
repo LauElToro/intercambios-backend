@@ -2,7 +2,7 @@ import prisma from '../../../infrastructure/database/prisma.js';
 import type { Prisma } from '@prisma/client';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
-import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId, marketItemIdsParaStock, cantidadAcuerdo } from '../../../domain/services/chatPropuesta.js';
+import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId, marketItemIdsParaStock, cantidadAcuerdo, resolverModoOperacion } from '../../../domain/services/chatPropuesta.js';
 import {
   marcarCodigoAcuerdoUsado,
   validarCodigoParaAcuerdo,
@@ -114,7 +114,7 @@ export class RegistroIntercambioTruequeUseCase {
           contenido: m.contenido,
           createdAt: m.createdAt,
         }));
-        const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuestaLegacy);
+        const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuestaLegacy, 'permuta');
 
         const intercambio = await tx.intercambio.create({
           data: {
@@ -180,11 +180,13 @@ export class RegistroIntercambioTruequeUseCase {
         createdAt: m.createdAt,
       }));
 
+      const modo = resolverModoOperacion(acuerdo, mensajesPropuesta);
       const pagadorId = resolverPagadorId(
         conversacion.compradorId,
         conversacion.vendedorId,
         mensajesPropuesta,
-        acuerdo.pagadorId
+        acuerdo.pagadorId,
+        modo
       );
 
       if (pagadorId !== userId) {
@@ -257,7 +259,7 @@ export class RegistroIntercambioTruequeUseCase {
       });
 
       const cantidad = cantidadAcuerdo(acuerdo);
-      const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuesta);
+      const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuesta, modo);
       await decrementarStockItems(tx, itemIds, cantidad);
 
       await marcarCodigoAcuerdoUsado(tx, conversacionId, ultimoAcuerdo);

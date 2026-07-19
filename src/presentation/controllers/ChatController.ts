@@ -16,7 +16,8 @@ import {
   propuestaPagoToResumen,
   formatearPreviewMensaje,
   resolverPagadorId,
-  tienePropuestaIntercambioEnHilo,
+  resolverModoOperacion,
+  valorReferenciaOperacion,
 } from '../../domain/services/chatPropuesta.js';
 import {
   minimoIoxRequerido,
@@ -288,11 +289,13 @@ export class ChatController {
 
       let codeRecipientId = conversacion.compradorId;
       if (ultimoAcuerdo) {
+        const modo = resolverModoOperacion(ultimoAcuerdo, mensajesPropuesta);
         codeRecipientId = resolverPagadorId(
           conversacion.compradorId,
           conversacion.vendedorId,
           mensajesPropuesta,
-          ultimoAcuerdo.pagadorId
+          ultimoAcuerdo.pagadorId,
+          modo
         );
       }
 
@@ -414,7 +417,8 @@ export class ChatController {
           conversacion.compradorId,
           conversacion.vendedorId,
           mensajesPropuesta,
-          ultimoAcuerdo.pagadorId
+          ultimoAcuerdo.pagadorId,
+          resolverModoOperacion(ultimoAcuerdo, mensajesPropuesta)
         );
         const montoIox = ultimoAcuerdo.iox ?? 0;
         if (montoIox > 0) {
@@ -443,7 +447,8 @@ export class ChatController {
             conversacion.compradorId,
             conversacion.vendedorId,
             mensajesPropuesta,
-            ultimoAcuerdo.pagadorId
+            ultimoAcuerdo.pagadorId,
+            resolverModoOperacion(ultimoAcuerdo, mensajesPropuesta)
           )
         : conversacion.compradorId;
 
@@ -495,7 +500,7 @@ export class ChatController {
         });
       }
 
-      const infoMsg = `Código de verificación enviado por email a ${destinatario.nombre} (quien paga la diferencia). Revisá tu casilla si sos esa persona e ingresalo en «Registrar intercambio» solo cuando te encuentres y/o recibas el producto.`;
+      const infoMsg = `Código de verificación enviado por email a ${destinatario.nombre} (quien paga). Revisá tu casilla si sos esa persona e ingresalo en «Registrar intercambio» solo cuando te encuentres y/o recibas el producto.`;
       await prisma.mensaje.create({
         data: { conversacionId, senderId: userId, contenido: infoMsg },
       });
@@ -512,7 +517,7 @@ export class ChatController {
         ok: true,
         emailEnviadoA: destinatario.nombre,
         mensaje:
-          'Se envió un código de 6 dígitos por email a quien paga la diferencia. Solo esa persona puede confirmar el intercambio.',
+          'Se envió un código de 6 dígitos por email a quien paga. Solo esa persona puede confirmar la operación.',
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -567,22 +572,12 @@ export class ChatController {
             });
             valorReferencia = item?.precio ?? 0;
           }
-          if (tienePropuestaIntercambioEnHilo(mensajesPrevios)) {
-            const msgInter = mensajesPrevios.find((m) => /"_t":"intercambio"/.test(m.contenido));
-            if (msgInter) {
-              try {
-                const parsed = JSON.parse(msgInter.contenido) as {
-                  miProducto?: { precio?: number };
-                  tuProducto?: { precio?: number };
-                };
-                const mi = Number(parsed.miProducto?.precio ?? 0) || 0;
-                const tu = Number(parsed.tuProducto?.precio ?? 0) || 0;
-                valorReferencia = Math.max(mi, tu, valorReferencia);
-              } catch {
-                /* ignore */
-              }
-            }
-          }
+          const modo = resolverModoOperacion(propuestaJson, mensajesPrevios);
+          valorReferencia = valorReferenciaOperacion({
+            modo,
+            precioMarketItem: valorReferencia,
+            mensajes: mensajesPrevios,
+          });
 
           const errMin = validarMinimoIoxEnPropuesta(propuestaJson, valorReferencia);
           if (errMin) {
@@ -593,7 +588,8 @@ export class ChatController {
             conversacion.compradorId,
             conversacion.vendedorId,
             mensajesPrevios,
-            userId
+            userId,
+            modo
           );
           const montoIox = propuestaJson.iox ?? 0;
           if (montoIox > 0) {
@@ -740,7 +736,8 @@ export class ChatController {
                 c.compradorId,
                 c.vendedorId,
                 mensajesPropuesta,
-                ultimoAcuerdo.pagadorId
+                ultimoAcuerdo.pagadorId,
+                resolverModoOperacion(ultimoAcuerdo, mensajesPropuesta)
               );
               if (pagadorId !== userId) return null;
 
