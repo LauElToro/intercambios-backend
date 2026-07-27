@@ -1,10 +1,10 @@
-/** Buzón único de Intercambius (envío transaccional). */
+/** Remitente transaccional (MFA, bienvenida, etc.). */
 export const NOREPLY_EMAIL = 'noreply@intercambius.com.ar';
 
-/** Inbox de consultas generales del formulario web. Configurar CONTACT_INBOX_EMAIL en Vercel. */
+/** Inbox de consultas del formulario. Requiere alias/usuario en Google Workspace. */
 export const CONTACT_INBOX_EMAIL_DEFAULT = 'contacto@intercambius.com.ar';
 
-/** Inbox de quejas y sugerencias. Configurar RECLAMOS_INBOX_EMAIL en Vercel. */
+/** Inbox de quejas y sugerencias. Requiere alias/usuario en Google Workspace. */
 export const RECLAMOS_INBOX_EMAIL_DEFAULT = 'reclamos@intercambius.com.ar';
 
 export const DEFAULT_SMTP_FROM = `"Intercambius" <${NOREPLY_EMAIL}>`;
