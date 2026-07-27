@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
-import { CONTACT_INBOX_EMAIL_DEFAULT, NOREPLY_EMAIL } from '../../infrastructure/config/email.constants.js';
+import {
+  NOREPLY_EMAIL,
+  resolveContactInbox,
+} from '../../infrastructure/config/email.constants.js';
 import { emailService } from '../../infrastructure/services/email.service.js';
 
 const MAX_FILES = 5;
@@ -74,11 +77,8 @@ export class ContactController {
         });
       }
 
-      // Inbox del formulario: CONTACT_INBOX_EMAIL en Vercel (ideal: contactenos@). Remitente sigue siendo noreply@.
-      const inboxTo =
-        process.env.CONTACT_INBOX_EMAIL?.trim() ||
-        CONTACT_INBOX_EMAIL_DEFAULT ||
-        NOREPLY_EMAIL;
+      // Consulta/otro → contacto@ ; queja/sugerencia → reclamos@
+      const inboxTo = resolveContactInbox(categoria);
 
       await emailService.sendContactInquiry({
         inboxTo,

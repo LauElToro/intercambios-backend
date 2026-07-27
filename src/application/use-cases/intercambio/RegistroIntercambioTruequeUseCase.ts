@@ -20,8 +20,12 @@ async function decrementarStockItems(
     const marketItem = await tx.marketItem.findUnique({ where: { id } });
     if (!marketItem || marketItem.rubro === 'servicios') continue;
     const current = marketItem.stock ?? 0;
-    if (current <= 0) continue;
-    const newStock = Math.max(0, current - cantidad);
+    if (current < cantidad) {
+      throw new Error(
+        `Stock insuficiente en "${marketItem.titulo}": hay ${current} unidad(es) y se pidieron ${cantidad}.`
+      );
+    }
+    const newStock = current - cantidad;
     await tx.marketItem.update({
       where: { id },
       data: {

@@ -246,7 +246,7 @@ export class ChatController {
         include: {
           comprador: { select: { id: true, nombre: true, kycVerificado: true } },
           vendedor: { select: { id: true, nombre: true, kycVerificado: true } },
-          marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true, precio: true } },
+          marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true, precio: true, stock: true } },
         },
       });
 
@@ -565,12 +565,14 @@ export class ChatController {
           });
 
           let valorReferencia = 0;
+          let stockItem: { precio: number; stock: number | null; rubro: string } | null = null;
           if (conversacion.marketItemId) {
             const item = await prisma.marketItem.findUnique({
               where: { id: conversacion.marketItemId },
-              select: { precio: true },
+              select: { precio: true, stock: true, rubro: true },
             });
             valorReferencia = item?.precio ?? 0;
+            stockItem = item;
           }
           const modo = resolverModoOperacion(propuestaJson, mensajesPrevios);
           valorReferencia = valorReferenciaOperacion({
@@ -578,6 +580,22 @@ export class ChatController {
             precioMarketItem: valorReferencia,
             mensajes: mensajesPrevios,
           });
+
+          const cantidadPedida =
+            propuestaJson.cantidad && propuestaJson.cantidad > 0 ? propuestaJson.cantidad : 1;
+          if (
+            stockItem &&
+            stockItem.rubro !== 'servicios' &&
+            stockItem.stock != null &&
+            cantidadPedida > stockItem.stock
+          ) {
+            return res.status(400).json({
+              error:
+                stockItem.stock <= 0
+                  ? 'Este producto no tiene unidades disponibles.'
+                  : `Solo hay ${stockItem.stock} unidad(es) disponibles. No podés proponer ${cantidadPedida}.`,
+            });
+          }
 
           const errMin = validarMinimoIoxEnPropuesta(propuestaJson, valorReferencia);
           if (errMin) {
