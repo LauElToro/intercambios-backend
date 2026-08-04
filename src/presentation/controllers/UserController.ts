@@ -6,6 +6,8 @@ import { UserRepository } from '../../infrastructure/repositories/UserRepository
 import { User } from '../../domain/entities/User.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { isNumericUserIdParam, updateUserProfileSlug } from '../../utils/profileSlug.js';
+import { SetTerminosCreditoUseCase } from '../../application/use-cases/user/SetTerminosCreditoUseCase.js';
+import { tryApplyCreditoOferta } from '../../domain/services/creditoOferta.service.js';
 
 const MAX_INTERESES = 25;
 const MAX_INTERES_LEN = 80;
@@ -28,6 +30,21 @@ function parseInteresesQuiero(raw: unknown): string[] {
 const userRepository = new UserRepository();
 const createUserUseCase = new CreateUserUseCase(userRepository);
 const updateUserSaldoUseCase = new UpdateUserSaldoUseCase(userRepository);
+const setTerminosCreditoUseCase = new SetTerminosCreditoUseCase();
+
+async function loadCreditoMeta(userId: number): Promise<{
+  aceptaTerminosCredito: boolean | null;
+  creditoOfertaAplicado: boolean;
+}> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { aceptaTerminosCredito: true, creditoOfertaAplicado: true },
+  });
+  return {
+    aceptaTerminosCredito: row?.aceptaTerminosCredito ?? null,
+    creditoOfertaAplicado: row?.creditoOfertaAplicado ?? false,
+  };
+}
 
 async function resolveUserIdFromParam(param: string): Promise<number | null> {
   const raw = String(param || '').trim();
@@ -67,6 +84,12 @@ export class UserController {
       if (!userId) {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
+
+      const authUserId = (req as AuthRequest).userId;
+      if (authUserId && authUserId === userId) {
+        await tryApplyCreditoOferta(userId);
+      }
+
       const user = await userRepository.findById(userId);
       
       if (!user) {
@@ -74,7 +97,8 @@ export class UserController {
       }
 
       const { profileSlug, nombreTienda } = await loadProfileMeta(userId);
-      res.json({ ...user.toJSON(), profileSlug, nombreTienda });
+      const creditoMeta = await loadCreditoMeta(userId);
+      res.json({ ...user.toJSON(), profileSlug, nombreTienda, ...creditoMeta });
     } catch (error) {
       res.status(500).json({ error: 'Error al obtener usuario' });
     }
@@ -195,6 +219,40 @@ export class UserController {
       
       const user = await updateUserSaldoUseCase.execute(id, creditos);
       res.json(user.toJSON());
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  /** Persiste aceptación/rechazo de términos IOX y aplica crédito si ya publicó. */
+  static async setTerminosCredito(req: AuthRequest, res: Response) {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const acepta = req.body?.acepta;
+      if (typeof acepta !== 'boolean') {
+        return res.status(400).json({ error: 'El campo "acepta" (boolean) es obligatorio' });
+      }
+
+      const result = await setTerminosCreditoUseCase.execute(userId, acepta);
+      const user = await userRepository.findById(userId);
+      const { profileSlug, nombreTienda } = await loadProfileMeta(userId);
+
+      res.json({
+        ...result,
+        user: user
+          ? {
+              ...user.toJSON(),
+              profileSlug,
+              nombreTienda,
+              aceptaTerminosCredito: result.aceptaTerminosCredito,
+              creditoOfertaAplicado: result.creditoAplicado,
+            }
+          : null,
+      });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
     }

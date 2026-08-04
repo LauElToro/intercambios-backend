@@ -6,6 +6,7 @@ import { AuthRequest } from '../../infrastructure/middleware/auth.js';
 import prisma from '../../infrastructure/database/prisma.js';
 import { haversineDistanceKm, getValidCoords, roundDistanceKm } from '../../infrastructure/utils/geo.js';
 import { assertKycVerificado, isKycRequiredError } from '../../domain/services/kycPolicy.js';
+import { tryApplyCreditoOferta } from '../../domain/services/creditoOferta.service.js';
 
 const marketItemRepository = new MarketItemRepository();
 const getMarketItemsUseCase = new GetMarketItemsUseCase(marketItemRepository);
@@ -138,6 +139,12 @@ export class MarketController {
       }
       const body = { ...req.body, vendedorId: userId, stock };
       const item = await marketItemRepository.save(body as any);
+
+      const precio = typeof body.precio === 'number' ? body.precio : parseInt(String(body.precio ?? ''), 10);
+      if (Number.isFinite(precio) && precio > 0) {
+        await tryApplyCreditoOferta(userId, precio);
+      }
+
       res.status(201).json(item.toJSON());
     } catch (error: any) {
       if (isKycRequiredError(error)) {

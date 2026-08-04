@@ -53,6 +53,10 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP', tname, 'updatedAt');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'terminosAceptadosAt');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'deudaEnLimiteDesde');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN', tname, 'aceptaTerminosCredito');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'terminosCreditoRespondidosAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'creditoOfertaAplicado');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'creditoOfertaAplicadoAt');
         END IF;
       END $$;
     `);
@@ -368,6 +372,10 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "nombreTienda" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "aceptaTerminosCredito" BOOLEAN;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "terminosCreditoRespondidosAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicado" BOOLEAN NOT NULL DEFAULT false;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicadoAt" TIMESTAMP(3);`);
     } catch {
       // ignorar
     }
@@ -378,6 +386,10 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycVerificadoAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "kycLastDiditSessionId" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "nombreTienda" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "aceptaTerminosCredito" BOOLEAN;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "terminosCreditoRespondidosAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicado" BOOLEAN NOT NULL DEFAULT false;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicadoAt" TIMESTAMP(3);`);
     } catch {
       // ignorar
     }

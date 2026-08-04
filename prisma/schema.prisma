@@ -57,6 +57,12 @@ model User {
   terminosAceptadosAt  DateTime? // aceptación de términos en registro
   deudaEnLimiteDesde   DateTime? // deuda al límite negativo desde (regularización)
 
+  // Términos IOX (crédito complementario): null = no respondió aún
+  aceptaTerminosCredito       Boolean?
+  terminosCreditoRespondidosAt DateTime?
+  creditoOfertaAplicado       Boolean   @default(false)
+  creditoOfertaAplicadoAt     DateTime?
+
   // Referidos
   referralCode     String   @unique @default(cuid())
   referralSlug     String?  @unique

@@ -22,6 +22,8 @@ usersRouter.put('/me', (req, res) => {
   return UserController.updateUser(req as any, res);
 });
 
+usersRouter.post('/me/terminos-credito', (req, res) => UserController.setTerminosCredito(req as AuthRequest, res));
+
 usersRouter.get('/', UserController.getUsers);
 usersRouter.get('/:id', UserController.getUserById);
 usersRouter.post('/', UserController.createUser);

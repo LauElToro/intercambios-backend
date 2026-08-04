@@ -55,10 +55,19 @@ export class DiditWebhookController {
 
       const ok = verifyDiditWebhook(body, { signatureV2: sigV2, signatureSimple: sigSimple, timestamp: ts }, secret);
       if (!ok) {
+        console.warn('[DiditWebhook] Firma inválida', {
+          event_id: body.event_id,
+          webhook_type: body.webhook_type,
+          session_id: body.session_id,
+          hasSigV2: Boolean(sigV2),
+          hasSigSimple: Boolean(sigSimple),
+          hasTimestamp: Boolean(ts),
+        });
         return res.status(401).json({ error: 'Firma inválida' });
       }
 
       const webhookType = String(body.webhook_type ?? '');
+      const eventId = typeof body.event_id === 'string' ? body.event_id : undefined;
       if (!KYC_WEBHOOK_TYPES.has(webhookType)) {
         return res.status(200).json({ ok: true, ignored: true });
       }
@@ -83,7 +92,7 @@ export class DiditWebhookController {
             sessionId,
             apiKey,
           });
-          console.log('[DiditWebhook] KYC aprobado userId=%s session=%s', userId, String(body.session_id ?? ''));
+          console.log('[DiditWebhook] KYC aprobado userId=%s session=%s event=%s', userId, String(body.session_id ?? ''), eventId ?? '');
         } catch (e) {
           if (e instanceof KycDuplicateDocumentError) {
             await userRepository.setKycVerificado(userId, false);

@@ -27,6 +27,7 @@ async function main() {
       data: {
         kycVerificado: true,
         kycVerificadoAt: now,
+        verificado: true,
       },
       select: { id: true },
     });

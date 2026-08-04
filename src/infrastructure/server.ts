@@ -50,6 +50,22 @@ app.get('/api/health/email', async (_req: express.Request, res: express.Response
   }
 });
 
+app.get('/api/health/didit-webhook', (req: express.Request, res: express.Response) => {
+  import('../infrastructure/services/diditWebhookHealth.service.js').then(({ checkDiditWebhookHealth, expectedDiditWebhookUrl }) => {
+    const report = checkDiditWebhookHealth(req);
+    res.status(report.ok ? 200 : 503).json({
+      ok: report.ok,
+      expectedWebhookUrl: expectedDiditWebhookUrl(req),
+      ...report,
+    });
+  }).catch((err) => {
+    res.status(503).json({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+});
+
 // Public routes
 app.use('/api/auth', authRouter);
 app.use('/api/market', marketRouter);

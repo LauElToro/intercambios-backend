@@ -25,6 +25,7 @@ import { UserController } from '../src/presentation/controllers/UserController.j
 import { ensureSchema } from '../src/infrastructure/database/ensureSchema.js';
 import prisma from '../src/infrastructure/database/prisma.js';
 import { friendlyDatabaseErrorMessage } from '../src/infrastructure/config/database-env.js';
+import { checkDiditWebhookHealth, expectedDiditWebhookUrl } from '../src/infrastructure/services/diditWebhookHealth.service.js';
 
 const app = express();
 
@@ -36,6 +37,12 @@ app.use(corsMiddleware());
 // Sincronizar schema de la DB en cada cold start (añade columnas/tablas faltantes)
 app.use(async (req: Request, _res: Response, next: NextFunction) => {
   if (req.method === 'OPTIONS') {
+    next();
+    return;
+  }
+  // Webhooks Didit tienen timeout de 5s: no bloquear la respuesta con ensureSchema.
+  if (req.path.startsWith('/api/webhooks/')) {
+    void ensureSchema().catch(() => {});
     next();
     return;
   }
@@ -101,6 +108,15 @@ app.get('/api/health/email', async (_req: Request, res: Response) => {
       email: { error: err instanceof Error ? err.message : String(err) },
     });
   }
+});
+
+app.get('/api/health/didit-webhook', (req: Request, res: Response) => {
+  const report = checkDiditWebhookHealth(req);
+  res.status(report.ok ? 200 : 503).json({
+    ok: report.ok,
+    expectedWebhookUrl: expectedDiditWebhookUrl(req),
+    ...report,
+  });
 });
 
 /** Envía MFA de prueba al inbox indicado. Requiere header X-Email-Diag-Key = EMAIL_DIAG_SECRET en Vercel. */

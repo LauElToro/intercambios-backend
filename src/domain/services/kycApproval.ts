@@ -60,6 +60,7 @@ export async function approveKycForUser(
     data: {
       kycVerificado: true,
       kycVerificadoAt: new Date(),
+      verificado: true,
       ...(documentNumber ? { kycDocumentNumber: documentNumber } : {}),
     },
   });
