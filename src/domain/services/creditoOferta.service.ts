@@ -16,8 +16,8 @@ export function calcCreditoOfertaMonto(precioPublicacion: number): number {
 }
 
 /**
- * Asigna crédito IOX al publicar (o retroactivamente si ya publicó).
- * Solo aplica si: aceptó términos IOX, aún no recibió crédito y saldo === 0.
+ * Habilita la línea de crédito IOX al publicar (o retroactivamente si ya publicó).
+ * Solo toca el límite: el saldo no cambia. Baja cuando hay una compra real.
  */
 export async function tryApplyCreditoOferta(
   userId: number,
@@ -28,14 +28,12 @@ export async function tryApplyCreditoOferta(
     select: {
       aceptaTerminosCredito: true,
       creditoOfertaAplicado: true,
-      saldo: true,
     },
   });
 
   if (!user) return { applied: false };
   if (user.aceptaTerminosCredito !== true) return { applied: false };
   if (user.creditoOfertaAplicado) return { applied: false };
-  if (user.saldo !== 0) return { applied: false };
 
   let precio = precioPublicacion;
   if (precio == null) {
@@ -55,7 +53,6 @@ export async function tryApplyCreditoOferta(
     where: { id: userId },
     data: {
       limite: credito,
-      saldo: -credito,
       creditoOfertaAplicado: true,
       creditoOfertaAplicadoAt: new Date(),
     },

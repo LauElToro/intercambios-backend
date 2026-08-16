@@ -39,12 +39,18 @@ export class SetTerminosCreditoUseCase {
       };
     }
 
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { creditoOfertaAplicado: true },
+    });
+
     await prisma.user.update({
       where: { id: userId },
       data: {
         aceptaTerminosCredito: true,
         terminosCreditoRespondidosAt: now,
-        limite: 0,
+        // Sin publicación aún: sin línea. Si ya se aplicó, no pisar el límite.
+        ...(existing?.creditoOfertaAplicado ? {} : { limite: 0 }),
       },
     });
 
