@@ -57,6 +57,10 @@ async function runSchemaSync(): Promise<void> {
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'terminosCreditoRespondidosAt');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I BOOLEAN DEFAULT false', tname, 'creditoOfertaAplicado');
           EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'creditoOfertaAplicadoAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'googleId');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TEXT', tname, 'mfaCode');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'mfaCodeExpiresAt');
+          EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS %I TIMESTAMP(3)', tname, 'bannedAt');
         END IF;
       END $$;
     `);
@@ -333,6 +337,8 @@ async function runSchemaSync(): Promise<void> {
       ['customLabel4', 'TEXT'],
       ['categoryId', 'INTEGER'],
       ['stock', 'INTEGER'],
+      ['lat', 'DOUBLE PRECISION'],
+      ['lng', 'DOUBLE PRECISION'],
     ] as const;
     for (const [name, def] of marketItemCols) {
       try {
@@ -360,7 +366,7 @@ async function runSchemaSync(): Promise<void> {
       // ignorar
     }
 
-    // User: bio, fotoPerfil, banner, redesSociales, KYC Didit, nombreTienda
+    // User: bio, fotoPerfil, banner, redesSociales, KYC Didit, nombreTienda, Google/MFA/ban
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bio" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "fotoPerfil" TEXT;`);
@@ -376,6 +382,11 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "terminosCreditoRespondidosAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicado" BOOLEAN NOT NULL DEFAULT false;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicadoAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "googleId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "mfaCode" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "mfaCodeExpiresAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "bannedAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "User_googleId_key" ON "User"("googleId") WHERE "googleId" IS NOT NULL;`);
     } catch {
       // ignorar
     }
@@ -390,6 +401,10 @@ async function runSchemaSync(): Promise<void> {
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "terminosCreditoRespondidosAt" TIMESTAMP(3);`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicado" BOOLEAN NOT NULL DEFAULT false;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditoOfertaAplicadoAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "googleId" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "mfaCode" TEXT;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "mfaCodeExpiresAt" TIMESTAMP(3);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "bannedAt" TIMESTAMP(3);`);
     } catch {
       // ignorar
     }
@@ -429,10 +444,15 @@ async function runSchemaSync(): Promise<void> {
       // ignorar
     }
 
-    // Intercambio: externalId, marketItemId
+    // Intercambio: externalId, marketItemId, canje bilateral
     try {
       await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "externalId" TEXT;`);
       await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "marketItemId" INTEGER;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "otroMarketItemId" INTEGER;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Intercambio" ADD COLUMN IF NOT EXISTS "modo" TEXT;`);
+      await prisma.$executeRawUnsafe(
+        `CREATE INDEX IF NOT EXISTS "Intercambio_otroMarketItemId_idx" ON "Intercambio"("otroMarketItemId");`
+      );
     } catch {
       // ignorar
     }
@@ -558,6 +578,7 @@ async function runSchemaSync(): Promise<void> {
       ['MarketItemCaracteristica', 'MarketItemCaracteristica_marketItemId_fkey', '"marketItemId"', 'MarketItem', 'CASCADE'],
       ['Intercambio', 'Intercambio_usuarioId_fkey', '"usuarioId"', 'User', 'RESTRICT'],
       ['Intercambio', 'Intercambio_otraPersonaId_fkey', '"otraPersonaId"', 'User', 'RESTRICT'],
+      ['Intercambio', 'Intercambio_otroMarketItemId_fkey', '"otroMarketItemId"', 'MarketItem', 'SET NULL'],
     ] as const;
     for (const [table, conname, col, refTable, onDelete] of fks) {
       try {

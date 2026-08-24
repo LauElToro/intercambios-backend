@@ -39,6 +39,7 @@ export class EvaluacionController {
         take: 50,
         include: {
           marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true } },
+          otroMarketItem: { select: { id: true, titulo: true, rubro: true, imagen: true } },
           evaluaciones: { select: { evaluadorId: true } },
         },
       });
@@ -49,6 +50,7 @@ export class EvaluacionController {
           const soyComprador = i.usuarioId === userId;
           const evaluadoId = soyComprador ? i.otraPersonaId : i.usuarioId;
           const evaluadoNombre = soyComprador ? i.otraPersonaNombre : null;
+          const modo = i.modo === 'permuta' || i.modo === 'compra' ? i.modo : null;
           return {
             intercambioId: i.id,
             soyComprador,
@@ -57,7 +59,9 @@ export class EvaluacionController {
             descripcion: i.descripcion,
             fecha: i.fecha,
             marketItem: i.marketItem,
+            otroMarketItem: i.otroMarketItem,
             rubro: i.marketItem?.rubro ?? 'productos',
+            modo,
           };
         });
 
@@ -80,6 +84,7 @@ export class EvaluacionController {
         where: { id: intercambioId },
         include: {
           marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true } },
+          otroMarketItem: { select: { id: true, titulo: true, rubro: true, imagen: true } },
           evaluaciones: true,
         },
       });
@@ -98,7 +103,9 @@ export class EvaluacionController {
         select: { id: true, nombre: true, nombreTienda: true, profileSlug: true, fotoPerfil: true },
       });
       const yaEvaluado = intercambio.evaluaciones.some((e) => e.evaluadorId === userId);
-      const rubro = intercambio.marketItem?.rubro ?? 'productos';
+      const modo = intercambio.modo === 'permuta' || intercambio.modo === 'compra' ? intercambio.modo : null;
+      const itemRecibido = soyComprador ? intercambio.marketItem : intercambio.otroMarketItem ?? intercambio.marketItem;
+      const rubro = itemRecibido?.rubro ?? intercambio.marketItem?.rubro ?? 'productos';
       const esServicio = rubro === 'servicios' || rubro === 'experiencias';
 
       res.json({
@@ -107,7 +114,9 @@ export class EvaluacionController {
         yaEvaluado,
         evaluado,
         marketItem: intercambio.marketItem,
+        otroMarketItem: intercambio.otroMarketItem,
         rubro,
+        modo,
         esServicio,
         labels: {
           item: esServicio ? 'Servicio' : 'Producto',
@@ -143,7 +152,7 @@ export class EvaluacionController {
 
       const intercambio = await prisma.intercambio.findUnique({
         where: { id: intercambioId },
-        include: { marketItem: { select: { rubro: true } } },
+        include: { marketItem: { select: { rubro: true } }, otroMarketItem: { select: { rubro: true } } },
       });
       if (!intercambio) return res.status(404).json({ error: 'Intercambio no encontrado' });
       if (intercambio.usuarioId !== userId && intercambio.otraPersonaId !== userId) {
@@ -155,9 +164,12 @@ export class EvaluacionController {
 
       const soyComprador = intercambio.usuarioId === userId;
       const evaluadoId = soyComprador ? intercambio.otraPersonaId : intercambio.usuarioId;
-      const rubro = intercambio.marketItem?.rubro ?? 'productos';
+      const modo = intercambio.modo === 'permuta' || intercambio.modo === 'compra' ? intercambio.modo : null;
+      const itemRecibido = soyComprador ? intercambio.marketItem : intercambio.otroMarketItem ?? intercambio.marketItem;
+      const rubro = itemRecibido?.rubro ?? intercambio.marketItem?.rubro ?? 'productos';
+      const exigePuntuacionItem = soyComprador || modo === 'permuta';
 
-      if (soyComprador && puntuacionItem == null) {
+      if (exigePuntuacionItem && puntuacionItem == null) {
         return res.status(400).json({
           error: `La puntuación de ${rubro === 'servicios' ? 'servicio' : 'producto'} debe ser entre 1 y 5`,
         });
@@ -175,7 +187,7 @@ export class EvaluacionController {
           intercambioId,
           evaluadorId: userId,
           evaluadoId,
-          puntuacionItem: soyComprador ? puntuacionItem : puntuacionItem,
+          puntuacionItem: exigePuntuacionItem ? puntuacionItem : null,
           puntuacionAtencion,
           comentario,
           rubro,

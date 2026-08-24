@@ -120,6 +120,7 @@ export class CheckoutUseCase {
           creditos: -precio,
           fecha: new Date(),
           estado: 'confirmado',
+          modo: 'compra',
         },
       });
 
@@ -153,6 +154,10 @@ export class CheckoutUseCase {
         });
       }
 
+      if (!conversacion) {
+        throw new Error('No se pudo crear o recuperar la conversación del checkout');
+      }
+
       return {
         intercambio: Intercambio.create({
           id: intercambio.id,
@@ -168,7 +173,7 @@ export class CheckoutUseCase {
           createdAt: intercambio.createdAt,
           updatedAt: intercambio.updatedAt,
         }),
-        conversacionId: conversacion!.id,
+        conversacionId: conversacion.id,
       };
     });
 

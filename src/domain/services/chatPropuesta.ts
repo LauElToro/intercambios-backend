@@ -357,6 +357,57 @@ function parseProductIdFromUrl(url?: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+type CardIntercambio = { id?: number; url?: string };
+
+function itemIdDesdeCard(card?: CardIntercambio): number | null {
+  if (!card) return null;
+  const rawId = (card as { id?: unknown }).id;
+  const n = typeof rawId === 'number' ? rawId : typeof rawId === 'string' ? parseInt(rawId, 10) : NaN;
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return parseProductIdFromUrl(card.url);
+}
+
+export function parsePayloadIntercambio(contenido: string): {
+  miProducto?: CardIntercambio;
+  tuProducto?: CardIntercambio;
+} | null {
+  const t = contenido.trim();
+  if (!t.startsWith('{')) return null;
+  try {
+    const p = JSON.parse(t) as {
+      _t?: string;
+      miProducto?: CardIntercambio;
+      tuProducto?: CardIntercambio;
+    };
+    if (p._t !== 'intercambio') return null;
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+export function mensajeEsPropuestaIntercambio(contenido: string): boolean {
+  if (parsePayloadIntercambio(contenido)) return true;
+  return (
+    /quiero realizar un intercambio/i.test(contenido) &&
+    (/ver mi producto/i.test(contenido) || /imagen del producto/i.test(contenido))
+  );
+}
+
+/** IDs de las dos publicaciones del mensaje `_t:intercambio` (id en JSON o URL). */
+export function idsDesdeMensajeIntercambio(mensajes: { contenido: string }[]): number[] {
+  const ids = new Set<number>();
+  for (const m of mensajes) {
+    const p = parsePayloadIntercambio(m.contenido);
+    if (!p) continue;
+    const miId = itemIdDesdeCard(p.miProducto);
+    const tuId = itemIdDesdeCard(p.tuProducto);
+    if (miId) ids.add(miId);
+    if (tuId) ids.add(tuId);
+  }
+  return [...ids];
+}
+
 /**
  * IDs de publicaciones cuyo stock debe moverse al confirmar.
  * - Compra: solo el market item de la conversación (lo que se vende).
@@ -373,25 +424,8 @@ export function marketItemIdsParaStock(
     return conversacion.marketItemId ? [conversacion.marketItemId] : [];
   }
 
-  const ids = new Set<number>();
+  const ids = new Set<number>(idsDesdeMensajeIntercambio(mensajes));
   if (conversacion.marketItemId) ids.add(conversacion.marketItemId);
-
-  const msgInter = mensajes.find((m) => /"_t":"intercambio"/.test(m.contenido));
-  if (msgInter) {
-    try {
-      const p = JSON.parse(msgInter.contenido) as {
-        miProducto?: { url?: string };
-        tuProducto?: { url?: string };
-      };
-      const miId = parseProductIdFromUrl(p.miProducto?.url);
-      const tuId = parseProductIdFromUrl(p.tuProducto?.url);
-      if (miId) ids.add(miId);
-      if (tuId) ids.add(tuId);
-    } catch {
-      /* ignore */
-    }
-  }
-
   return [...ids];
 }
 
@@ -402,8 +436,7 @@ export function formatearPreviewMensaje(contenido: string): string {
   if (json) return propuestaPagoToDisplayText(json);
   const legacy = parseLegacyPropuestaLinea(trimmed);
   if (legacy) return propuestaPagoToDisplayText(legacy);
-  if (trimmed.startsWith('{"_t":"intercambio"')) return 'Propuesta de intercambio';
-  if (/quiero realizar un intercambio/i.test(contenido)) return 'Propuesta de intercambio';
+  if (mensajeEsPropuestaIntercambio(trimmed)) return 'Propuesta de intercambio';
   if (mensajeEsAceptacionPropuesta(contenido)) return 'Aceptó la propuesta de pago';
   if (mensajeEsRechazoPropuesta(contenido)) return 'Rechazó la propuesta de pago';
   if (/código de verificación enviado por email/i.test(contenido)) {

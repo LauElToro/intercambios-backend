@@ -7,8 +7,9 @@ import { verifyGoogleIdToken } from '../../../infrastructure/services/google-id-
 import { emailService } from '../../../infrastructure/services/email.service.js';
 import prisma from '../../../infrastructure/database/prisma.js';
 import { serializeAuthUser } from './auth-user.utils.js';
+import { getJwtSecret } from '../../../config/jwt.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 
 export class GoogleAuthAccountNotFoundError extends Error {
   constructor() {

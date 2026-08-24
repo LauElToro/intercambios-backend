@@ -61,10 +61,11 @@ export class ChatController {
       if (!userId) return res.status(401).json({ error: 'No autorizado' });
       if (isNaN(conversacionId)) return res.status(400).json({ error: 'ID inválido' });
 
-      const { codigo, descripcion, fecha } = req.body as {
+      const { codigo, descripcion, fecha, otroMarketItemId } = req.body as {
         codigo?: string;
         descripcion?: string;
         fecha?: string;
+        otroMarketItemId?: number;
       };
       if (!codigo || !String(descripcion).trim()) {
         return res.status(400).json({ error: 'Código y descripción son obligatorios' });
@@ -76,6 +77,10 @@ export class ChatController {
         codigo: String(codigo),
         descripcion: String(descripcion).trim(),
         fecha: fecha ? new Date(fecha) : new Date(),
+        otroMarketItemId:
+          typeof otroMarketItemId === 'number'
+            ? otroMarketItemId
+            : parseInt(String(otroMarketItemId ?? ''), 10) || undefined,
       });
       return res.status(201).json(result);
     } catch (error: any) {
@@ -182,7 +187,10 @@ export class ChatController {
           }
         }
 
-        return res.status(200).json({ conversacionId: conversacion!.id });
+        if (!conversacion) {
+          return res.status(500).json({ error: 'No se pudo crear o recuperar la conversación' });
+        }
+        return res.status(200).json({ conversacionId: conversacion.id });
       }
 
       let vendedorId: number;
@@ -228,7 +236,10 @@ export class ChatController {
         await prisma.conversacion.update({ where: { id: conversacion.id }, data: { updatedAt: new Date() } }).catch(() => {});
       }
 
-      res.status(200).json({ conversacionId: conversacion!.id });
+      if (!conversacion) {
+        return res.status(500).json({ error: 'No se pudo crear o recuperar la conversación' });
+      }
+      res.status(200).json({ conversacionId: conversacion.id });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -246,7 +257,17 @@ export class ChatController {
         include: {
           comprador: { select: { id: true, nombre: true, kycVerificado: true } },
           vendedor: { select: { id: true, nombre: true, kycVerificado: true } },
-          marketItem: { select: { id: true, titulo: true, rubro: true, imagen: true, precio: true, stock: true } },
+          marketItem: {
+            select: {
+              id: true,
+              titulo: true,
+              rubro: true,
+              imagen: true,
+              precio: true,
+              stock: true,
+              detalles: { select: { clave: true, valor: true } },
+            },
+          },
         },
       });
 
@@ -310,7 +331,19 @@ export class ChatController {
           vendedorId: conversacion.vendedorId,
           soyComprador: conversacion.compradorId === userId,
           otroUsuario: { id: otro.id, nombre: otro.nombre, kycVerificado: otro.kycVerificado },
-          marketItem: conversacion.marketItem,
+          marketItem: conversacion.marketItem
+            ? {
+                id: conversacion.marketItem.id,
+                titulo: conversacion.marketItem.titulo,
+                rubro: conversacion.marketItem.rubro,
+                imagen: conversacion.marketItem.imagen,
+                precio: conversacion.marketItem.precio,
+                stock: conversacion.marketItem.stock,
+                detalles: Object.fromEntries(
+                  conversacion.marketItem.detalles.map((d) => [d.clave, d.valor])
+                ),
+              }
+            : null,
           puedeConfirmarRegistro,
           registroCompletado: !!conversacion.registroIntercambioCompletadoAt && !acuerdoPendiente,
           acuerdoPendienteConfirmacion: acuerdoPendiente,

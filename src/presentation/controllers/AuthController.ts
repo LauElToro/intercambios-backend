@@ -14,9 +14,10 @@ import { isGoogleOAuthConfigured } from '../../infrastructure/services/google-id
 import { isGoogleOAuthCodeFlowConfigured, exchangeGoogleAuthCode } from '../../infrastructure/services/google-oauth-code.service.js';
 import { isEmailDeliveryError } from '../../infrastructure/services/email.errors.js';
 import { friendlyDatabaseErrorMessage } from '../../infrastructure/config/database-env.js';
+import { getJwtSecret } from '../../config/jwt.js';
 
 const userRepository = new UserRepository();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 const loginUseCase = new LoginUseCase(userRepository);
 const registerUseCase = new RegisterUseCase(userRepository);
 const verifyMfaUseCase = new VerifyMfaUseCase(userRepository);

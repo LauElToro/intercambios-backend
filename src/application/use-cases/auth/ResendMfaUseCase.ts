@@ -3,8 +3,9 @@ import { IUserRepository } from '../../../domain/repositories/IUserRepository.js
 import { SendMfaAndRequireVerificationUseCase } from './SendMfaAndRequireVerificationUseCase.js';
 import { mfaResendAvailableAt, mfaResendSecondsRemaining } from './mfa.constants.js';
 import { MfaResendCooldownError } from './mfa.errors.js';
+import { getJwtSecret } from '../../../config/jwt.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 
 type MfaTokenPayload = {
   userId: number;

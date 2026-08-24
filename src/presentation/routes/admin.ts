@@ -8,6 +8,7 @@ adminRouter.use(adminMiddleware);
 
 adminRouter.get('/metrics', AdminController.getMetrics);
 adminRouter.get('/users', AdminController.getUsers);
+adminRouter.patch('/users/:id/saldo', AdminController.updateUserSaldo);
 adminRouter.post('/users/:id/ban', AdminController.banUser);
 adminRouter.post('/users/:id/unban', AdminController.unbanUser);
 adminRouter.delete('/users/:id', AdminController.deleteUser);

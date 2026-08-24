@@ -157,10 +157,17 @@ export class MarketController {
   static async updateMarketItem(req: Request, res: Response) {
     try {
       const id = parseInt(req.params.id);
+      const userId = (req as AuthRequest).userId;
+      if (!userId) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
       const existingItem = await marketItemRepository.findById(id);
       
       if (!existingItem) {
         return res.status(404).json({ error: 'Item no encontrado' });
+      }
+      if (existingItem.vendedorId !== userId) {
+        return res.status(403).json({ error: 'Solo podés editar tus propias publicaciones' });
       }
 
       const effectiveRubro = (req.body.rubro ?? existingItem.rubro) as string;

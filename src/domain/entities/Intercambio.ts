@@ -1,4 +1,5 @@
 export type EstadoIntercambio = 'pendiente' | 'confirmado' | 'cancelado';
+export type ModoIntercambio = 'compra' | 'permuta';
 
 export class Intercambio {
   private constructor(
@@ -12,6 +13,8 @@ export class Intercambio {
     private _estado: EstadoIntercambio,
     public readonly marketItemId?: number,
     public readonly conversacionId?: number | null,
+    public readonly otroMarketItemId?: number | null,
+    public readonly modo?: ModoIntercambio | null,
     public readonly createdAt?: Date,
     public readonly updatedAt?: Date
   ) {}
@@ -27,6 +30,8 @@ export class Intercambio {
     estado?: EstadoIntercambio;
     marketItemId?: number;
     conversacionId?: number | null;
+    otroMarketItemId?: number | null;
+    modo?: ModoIntercambio | null;
     createdAt?: Date;
     updatedAt?: Date;
   }): Intercambio {
@@ -41,6 +46,8 @@ export class Intercambio {
       data.estado || 'pendiente',
       data.marketItemId,
       data.conversacionId,
+      data.otroMarketItemId ?? null,
+      data.modo ?? null,
       data.createdAt,
       data.updatedAt
     );

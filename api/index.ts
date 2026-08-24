@@ -113,7 +113,6 @@ app.get('/api/health/email', async (_req: Request, res: Response) => {
 app.get('/api/health/didit-webhook', (req: Request, res: Response) => {
   const report = checkDiditWebhookHealth(req);
   res.status(report.ok ? 200 : 503).json({
-    ok: report.ok,
     expectedWebhookUrl: expectedDiditWebhookUrl(req),
     ...report,
   });

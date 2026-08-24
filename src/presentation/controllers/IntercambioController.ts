@@ -21,6 +21,8 @@ function intercambioToJson(intercambio: any): Record<string, unknown> {
     fecha: intercambio.fecha,
     estado: intercambio.estado,
     marketItemId: intercambio.marketItemId,
+    otroMarketItemId: intercambio.otroMarketItemId ?? null,
+    modo: intercambio.modo ?? null,
     conversacionId: intercambio.conversacionId ?? null,
     createdAt: intercambio.createdAt,
     updatedAt: intercambio.updatedAt,
@@ -67,6 +69,12 @@ export class IntercambioController {
           const item = await marketItemRepository.findById(i.marketItemId);
           if (item) {
             (base as any).marketItem = marketItemToJson(item);
+          }
+        }
+        if (i.otroMarketItemId) {
+          const otro = await marketItemRepository.findById(i.otroMarketItemId);
+          if (otro) {
+            (base as any).otroMarketItem = marketItemToJson(otro);
           }
         }
         return base;

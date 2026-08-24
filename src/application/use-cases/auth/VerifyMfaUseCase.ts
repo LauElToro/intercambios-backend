@@ -2,8 +2,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { IUserRepository } from '../../../domain/repositories/IUserRepository.js';
 import { emailService } from '../../../infrastructure/services/email.service.js';
+import { getJwtSecret } from '../../../config/jwt.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 
 export class VerifyMfaUseCase {
   constructor(private userRepository: IUserRepository) {}

@@ -9,8 +9,30 @@ import {
   MESES_REGULARIZACION_DEUDA,
   SALDO_POSITIVO_MAX_IOX,
 } from '../../config/economy.js';
+import { UpdateUserSaldoUseCase } from '../../application/use-cases/user/UpdateUserSaldoUseCase.js';
+import { UserRepository } from '../../infrastructure/repositories/UserRepository.js';
+
+const updateUserSaldoUseCase = new UpdateUserSaldoUseCase(new UserRepository());
 
 export class AdminController {
+  /** Ajuste manual de saldo (solo admin). */
+  static async updateUserSaldo(req: AdminRequest, res: Response) {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const { creditos } = req.body ?? {};
+      if (!Number.isFinite(id) || id <= 0) {
+        return res.status(400).json({ error: 'ID de usuario inválido' });
+      }
+      if (typeof creditos !== 'number' || !Number.isFinite(creditos)) {
+        return res.status(400).json({ error: 'créditos inválidos' });
+      }
+      const user = await updateUserSaldoUseCase.execute(id, creditos);
+      res.json(user.toJSON());
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
   /** Métricas globales para el dashboard */
   static async getMetrics(req: AdminRequest, res: Response) {
     try {

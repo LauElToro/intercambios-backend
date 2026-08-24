@@ -2,7 +2,7 @@ import prisma from '../../../infrastructure/database/prisma.js';
 import type { Prisma } from '@prisma/client';
 import { DEFAULT_CREDIT_LIMIT_IOX } from '../../../config/credit.js';
 import { assertVendedorSaldoNoExcedeTope, computeDeudaEnLimiteDesde } from '../../../domain/services/economyRules.js';
-import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId, marketItemIdsParaStock, cantidadAcuerdo, resolverModoOperacion } from '../../../domain/services/chatPropuesta.js';
+import { acuerdoPendienteDeConfirmar, parseUltimoAcuerdoAceptado, resolverPagadorId, marketItemIdsParaStock, cantidadAcuerdo, resolverModoOperacion, idsDesdeMensajeIntercambio, mensajeEsPropuestaIntercambio } from '../../../domain/services/chatPropuesta.js';
 import {
   marcarCodigoAcuerdoUsado,
   validarCodigoParaAcuerdo,
@@ -10,6 +10,39 @@ import {
 import { notificationService } from '../../../infrastructure/services/notification.service.js';
 
 type TipoAcuerdo = 'iox' | 'pesos' | 'usd';
+
+function parseOptionalPositiveInt(raw: unknown): number | undefined {
+  const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.floor(n);
+}
+
+/**
+ * Segundo ítem de un canje: el que no es el de la conversación.
+ * Se ignora si no existe o no pertenece a ninguna de las dos partes.
+ */
+async function resolverOtroMarketItemId(
+  tx: Prisma.TransactionClient,
+  conversacion: { marketItemId: number | null; compradorId: number; vendedorId: number },
+  requestedId: number | undefined,
+  mensajes: { contenido: string }[]
+): Promise<number | undefined> {
+  let candidate = requestedId;
+  if (!candidate) {
+    const ids = idsDesdeMensajeIntercambio(mensajes);
+    candidate = ids.find((id) => id !== conversacion.marketItemId);
+  }
+  if (!candidate || candidate === conversacion.marketItemId) return undefined;
+  const item = await tx.marketItem.findUnique({
+    where: { id: candidate },
+    select: { id: true, vendedorId: true },
+  });
+  if (!item) return undefined;
+  if (item.vendedorId !== conversacion.compradorId && item.vendedorId !== conversacion.vendedorId) {
+    return undefined;
+  }
+  return item.id;
+}
 
 async function decrementarStockItems(
   tx: Prisma.TransactionClient,
@@ -47,6 +80,7 @@ export class RegistroIntercambioTruequeUseCase {
     codigo: string;
     descripcion: string;
     fecha: Date;
+    otroMarketItemId?: number;
   }): Promise<{
     intercambioId: number;
     tipo: TipoAcuerdo;
@@ -56,6 +90,7 @@ export class RegistroIntercambioTruequeUseCase {
     saldoReceptor: number;
   }> {
     const { userId, conversacionId, codigo, descripcion, fecha } = params;
+    const otroMarketItemIdSolicitado = parseOptionalPositiveInt(params.otroMarketItemId);
     const cod = String(codigo).trim().replace(/\D/g, '');
     if (cod.length !== 6) {
       throw new Error('El código debe tener 6 dígitos');
@@ -83,11 +118,7 @@ export class RegistroIntercambioTruequeUseCase {
         mensajes.map((m) => ({ id: m.id, senderId: m.senderId, contenido: m.contenido, createdAt: m.createdAt }))
       );
 
-      const tienePropuestaIntercambio = mensajes.some((m) =>
-        /"_t":"intercambio"/.test(m.contenido) ||
-        (/quiero realizar un intercambio/i.test(m.contenido) &&
-          (/ver mi producto/i.test(m.contenido) || /imagen del producto/i.test(m.contenido)))
-      );
+      const tienePropuestaIntercambio = mensajes.some((m) => mensajeEsPropuestaIntercambio(m.contenido));
 
       if (!ultimoAcuerdo) {
         if (
@@ -119,6 +150,12 @@ export class RegistroIntercambioTruequeUseCase {
           createdAt: m.createdAt,
         }));
         const itemIds = marketItemIdsParaStock(conversacion, mensajesPropuestaLegacy, 'permuta');
+        const otroMarketItemId = await resolverOtroMarketItemId(
+          tx,
+          conversacion,
+          otroMarketItemIdSolicitado,
+          mensajesPropuestaLegacy
+        );
 
         const intercambio = await tx.intercambio.create({
           data: {
@@ -131,6 +168,8 @@ export class RegistroIntercambioTruequeUseCase {
             estado: 'confirmado',
             conversacionId: conversacion.id,
             marketItemId: conversacion.marketItemId ?? undefined,
+            otroMarketItemId: otroMarketItemId ?? undefined,
+            modo: 'permuta',
           },
         });
 
@@ -248,6 +287,13 @@ export class RegistroIntercambioTruequeUseCase {
       if (acuerdo.usd) extras.push(`${acuerdo.usd} USD`);
       const extra = extras.length > 0 ? ` — Acuerdo por fuera: ${extras.join(' + ')}` : '';
 
+      const otroMarketItemId = await resolverOtroMarketItemId(
+        tx,
+        conversacion,
+        otroMarketItemIdSolicitado,
+        mensajesPropuesta
+      );
+
       const intercambio = await tx.intercambio.create({
         data: {
           usuarioId: pagadorId,
@@ -259,6 +305,8 @@ export class RegistroIntercambioTruequeUseCase {
           estado: 'confirmado',
           conversacionId: conversacion.id,
           marketItemId: conversacion.marketItemId ?? undefined,
+          otroMarketItemId: otroMarketItemId ?? undefined,
+          modo,
         },
       });
 

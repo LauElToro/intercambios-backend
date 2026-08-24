@@ -8,8 +8,9 @@ import {
   MFA_TEMP_TOKEN_EXPIRY,
   mfaResendAvailableAt,
 } from './mfa.constants.js';
+import { getJwtSecret } from '../../../config/jwt.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = getJwtSecret();
 function generateSixDigitCode(): string {
   const n = Math.floor(100000 + Math.random() * 900000);
   return String(n);

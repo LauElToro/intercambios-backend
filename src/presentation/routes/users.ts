@@ -28,4 +28,4 @@ usersRouter.get('/', UserController.getUsers);
 usersRouter.get('/:id', UserController.getUserById);
 usersRouter.post('/', UserController.createUser);
 usersRouter.put('/:id', UserController.updateUser);
-usersRouter.patch('/:id/saldo', UserController.updateUserSaldo);
+// PATCH saldo: solo vía /api/admin/users/:id/saldo (adminMiddleware)

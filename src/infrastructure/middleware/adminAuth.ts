@@ -1,11 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../../config/jwt.js';
 
 export interface AdminRequest extends Request {
   admin?: boolean;
 }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export const adminMiddleware = (req: AdminRequest, res: Response, next: NextFunction) => {
   try {
@@ -14,7 +13,7 @@ export const adminMiddleware = (req: AdminRequest, res: Response, next: NextFunc
       return res.status(401).json({ error: 'No autorizado. Requiere login de admin.' });
     }
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, JWT_SECRET) as { admin?: boolean };
+    const decoded = jwt.verify(token, getJwtSecret()) as { admin?: boolean };
     if (!decoded.admin) {
       return res.status(403).json({ error: 'Acceso denegado. Solo administradores.' });
     }

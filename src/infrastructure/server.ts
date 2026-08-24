@@ -54,7 +54,6 @@ app.get('/api/health/didit-webhook', (req: express.Request, res: express.Respons
   import('../infrastructure/services/diditWebhookHealth.service.js').then(({ checkDiditWebhookHealth, expectedDiditWebhookUrl }) => {
     const report = checkDiditWebhookHealth(req);
     res.status(report.ok ? 200 : 503).json({
-      ok: report.ok,
       expectedWebhookUrl: expectedDiditWebhookUrl(req),
       ...report,
     });

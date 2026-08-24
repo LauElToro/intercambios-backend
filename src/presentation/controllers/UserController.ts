@@ -180,22 +180,23 @@ export class UserController {
 
       const nombreTiendaRaw = 'nombreTienda' in body ? String(body.nombreTienda ?? '').trim() : undefined;
 
+      // Campos privilegiados (saldo, rating, verificado, email) no se aceptan del body.
       const updatedUser = User.create({
         id: existingUser.id,
         nombre: req.body.nombre ?? existingUser.nombre,
         contacto: req.body.contacto ?? existingUser.contacto,
         saldo: existingUser.saldo,
         limite: existingUser.limite,
-        email: req.body.email ?? existingUser.email,
+        email: existingUser.email,
         ofrece: req.body.ofrece !== undefined ? req.body.ofrece : existingUser.ofrece,
         necesita: req.body.necesita !== undefined ? req.body.necesita : existingUser.necesita,
         interesesQuiero: nextIntereses,
         precioOferta: existingUser.precioOferta,
-        rating: req.body.rating ?? existingUser.rating,
-        totalResenas: req.body.totalResenas ?? existingUser.totalResenas,
+        rating: existingUser.rating,
+        totalResenas: existingUser.totalResenas,
         miembroDesde: existingUser.miembroDesde,
         ubicacion: req.body.ubicacion ?? existingUser.ubicacion,
-        verificado: req.body.verificado ?? existingUser.verificado,
+        verificado: existingUser.verificado,
         kycVerificado: existingUser.kycVerificado,
         bio: req.body.bio !== undefined ? req.body.bio : existingUser.bio,
         fotoPerfil: req.body.fotoPerfil !== undefined ? req.body.fotoPerfil : existingUser.fotoPerfil,
@@ -214,8 +215,12 @@ export class UserController {
 
   static async updateUserSaldo(req: Request, res: Response) {
     try {
+      // Solo admin (middleware en la ruta). Nunca exponer a usuarios normales.
       const id = parseInt(req.params.id);
       const { creditos } = req.body;
+      if (typeof creditos !== 'number' || !Number.isFinite(creditos)) {
+        return res.status(400).json({ error: 'créditos inválidos' });
+      }
       
       const user = await updateUserSaldoUseCase.execute(id, creditos);
       res.json(user.toJSON());
