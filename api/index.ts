@@ -18,6 +18,7 @@ import { contactRouter } from '../src/presentation/routes/contact.js';
 import { evaluacionesRouter } from '../src/presentation/routes/evaluaciones.js';
 import { geoRouter } from '../src/presentation/routes/geo.js';
 import { kycRouter } from '../src/presentation/routes/kyc.js';
+import { suscripcionRouter } from '../src/presentation/routes/suscripcion.js';
 import { webhooksRouter } from '../src/presentation/routes/webhooks.js';
 import { authMiddleware } from '../src/infrastructure/middleware/auth.js';
 import type { AuthRequest } from '../src/infrastructure/middleware/auth.js';
@@ -168,6 +169,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/referidos', referidosRouter);
 app.use('/api/evaluaciones', evaluacionesRouter);
 app.use('/api/kyc', authMiddleware, kycRouter);
+app.use('/api/suscripcion', authMiddleware, suscripcionRouter);
 
 // Error handling middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
