@@ -33,10 +33,11 @@ const CANCELADAS = new Set([
 ]);
 
 let tokenCache: { token: string; until: number } | null = null;
+let cotizacionCache: { arsPorUsd: number; until: number } | null = null;
 
-function moneda(): string {
-  return process.env.MERCADOPAGO_CURRENCY?.trim() || 'USD';
-}
+/** La cuenta es de Argentina: las suscripciones solo aceptan ARS. El KYC sí puede cobrarse en USD. */
+const MONEDA_SUSCRIPCION = 'ARS';
+const MINIMO_SUSCRIPCION_ARS = 15;
 
 function frontendUrl(): string {
   return (process.env.FRONTEND_URL || 'https://intercambius.com.ar').replace(/\/$/, '');
@@ -56,6 +57,27 @@ function credencialesPresentes(): boolean {
     process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() ||
       (process.env.MERCADOPAGO_CLIENT_ID?.trim() && process.env.MERCADOPAGO_CLIENT_SECRET?.trim()),
   );
+}
+
+async function arsPorUsd(): Promise<number> {
+  if (cotizacionCache && cotizacionCache.until > Date.now()) return cotizacionCache.arsPorUsd;
+  const token = await accessToken();
+  const response = await fetch('https://api.mercadopago.com/currency_conversions/search?from=USD&to=ARS', {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  const data = (await response.json().catch(() => ({}))) as { rate?: number; ratio?: number };
+  const rate = Number(data.rate || data.ratio);
+  if (response.ok && rate > 0) {
+    cotizacionCache = { arsPorUsd: rate, until: Date.now() + 10 * 60 * 1000 };
+    return rate;
+  }
+  const fijo = Number(process.env.MERCADOPAGO_ARS_PER_USD);
+  if (fijo > 0) return fijo;
+  throw new SuscripcionError('No pudimos cotizar el dólar para cobrar la suscripción.', 503);
+}
+
+function montoSuscripcionArs(usd: number, rate: number): number {
+  return Math.max(MINIMO_SUSCRIPCION_ARS, Math.round(usd * rate));
 }
 
 function mensajeMp(data: { cause?: { description?: string }[]; message?: string; error?: string }): string {
@@ -211,13 +233,20 @@ export async function estadoSuscripcion(userId: number): Promise<{
   configurado: boolean;
   planesAutorizados: string[];
   kycPago: boolean;
+  cotizacionArsPorUsd: number | null;
 }> {
   if (!credencialesPresentes()) {
-    return { configurado: false, planesAutorizados: [], kycPago: false };
+    return { configurado: false, planesAutorizados: [], kycPago: false, cotizacionArsPorUsd: null };
   }
   const planes = await planesAutorizados(userId);
   const kycPago = await kycEstaPago(userId, planes);
-  return { configurado: true, planesAutorizados: planes, kycPago };
+  let cotizacionArsPorUsd: number | null = null;
+  try {
+    cotizacionArsPorUsd = await arsPorUsd();
+  } catch {
+    cotizacionArsPorUsd = null;
+  }
+  return { configurado: true, planesAutorizados: planes, kycPago, cotizacionArsPorUsd };
 }
 
 export async function crearCheckout(
@@ -243,7 +272,7 @@ export async function crearCheckout(
           title: 'KYC Intercambius',
           description: 'Verificación de identidad, pago único',
           quantity: 1,
-          currency_id: moneda(),
+          currency_id: 'USD',
           unit_price: KYC_USD,
         },
       ],
@@ -273,8 +302,10 @@ export async function crearCheckout(
     );
   }
 
+  const cotizacion = await arsPorUsd();
+  const montoArs = montoSuscripcionArs(plan.monto, cotizacion);
   const preapproval = await mp('POST', '/preapproval', {
-    reason: plan.motivo,
+    reason: `${plan.motivo}. Equivale a USD ${plan.monto}.`,
     external_reference: referenciaPlan(user.id, codigo),
     payer_email: user.email,
     back_url: vuelta,
@@ -282,8 +313,8 @@ export async function crearCheckout(
     auto_recurring: {
       frequency: plan.frecuencia,
       frequency_type: 'months',
-      transaction_amount: plan.monto,
-      currency_id: moneda(),
+      transaction_amount: montoArs,
+      currency_id: MONEDA_SUSCRIPCION,
     },
   });
   const url = initPoint(preapproval, token);
