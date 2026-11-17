@@ -12,10 +12,10 @@ export class SuscripcionError extends Error {
 }
 
 const PLANES = {
-  intercambio_mensual: { grupo: 'intercambio' as const, monto: 3, frecuencia: 1, incluyeKyc: false, motivo: 'Intercambius — trueque, canje y compras (mensual)' },
-  intercambio_anual: { grupo: 'intercambio' as const, monto: 30, frecuencia: 12, incluyeKyc: true, motivo: 'Intercambius — trueque, canje y compras (anual, incluye KYC)' },
-  vendedor_mensual: { grupo: 'vendedor' as const, monto: 5, frecuencia: 1, incluyeKyc: false, motivo: 'Intercambius — ventas (mensual)' },
-  vendedor_anual: { grupo: 'vendedor' as const, monto: 45, frecuencia: 12, incluyeKyc: true, motivo: 'Intercambius — ventas (anual, incluye KYC)' },
+  intercambio_mensual: { grupo: 'intercambio' as const, monto: 3, frecuencia: 1, incluyeKyc: false, motivo: 'Intercambius mensual' },
+  intercambio_anual: { grupo: 'intercambio' as const, monto: 30, frecuencia: 12, incluyeKyc: true, motivo: 'Intercambius anual' },
+  vendedor_mensual: { grupo: 'vendedor' as const, monto: 5, frecuencia: 1, incluyeKyc: false, motivo: 'Intercambius ventas mensual' },
+  vendedor_anual: { grupo: 'vendedor' as const, monto: 45, frecuencia: 12, incluyeKyc: true, motivo: 'Intercambius ventas anual' },
 };
 
 type CodigoPlan = keyof typeof PLANES;
@@ -305,7 +305,7 @@ export async function crearCheckout(
   const cotizacion = await arsPorUsd();
   const montoArs = montoSuscripcionArs(plan.monto, cotizacion);
   const preapproval = await mp('POST', '/preapproval', {
-    reason: `${plan.motivo}. Equivale a USD ${plan.monto}.`,
+    reason: plan.motivo.slice(0, 60),
     external_reference: referenciaPlan(user.id, codigo),
     payer_email: user.email,
     back_url: vuelta,
